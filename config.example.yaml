@@ -1,0 +1,39 @@
+app:
+  name: Jarvis  # your assistant's name — change to anything you like
+  log_level: INFO
+
+runtime:
+  mode: push_to_talk
+  require_confirmation_for_actions: true
+
+audio:
+  input_device: null
+  output_device: null
+  sample_rate: 16000
+  channels: 1
+  record_seconds: 6
+
+stt:
+  provider: whisper_local
+  model: small
+  language: en
+
+tts:
+  provider: piper_local
+  voice: null
+
+brain:
+  provider: ollama
+  timeout_seconds: 60
+
+ollama:
+  base_url: http://100.x.x.x:11434
+  model: qwen3:8b
+
+openclaw:
+  base_url: null
+  agent: coremind
+
+memory:
+  enabled: true
+  max_turns: 10

@@ -1,0 +1,28 @@
+# NOTE: This service file is a template for Phase 12.
+# Do NOT enable it until `python -m coremind.main run` implements the full
+# voice loop (Phase 6). Enabling it before that point will cause the process
+# to exit immediately and systemd will enter a restart loop.
+#
+# Install instructions (Phase 12):
+#   sudo cp service/coremind.service /etc/systemd/system/coremind.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable coremind
+#   sudo systemctl start coremind
+#   journalctl -u coremind -f
+
+[Unit]
+Description=CoreMind Voice Assistant
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/coremind
+ExecStart=/home/pi/coremind/.venv/bin/python -m coremind.main run
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
