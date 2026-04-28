@@ -7,15 +7,27 @@ runtime:
   require_confirmation_for_actions: true
 
 audio:
+  # Run `python -m coremind.main audio list-devices` to see available devices.
+  # Set to the Index number shown in that table, or leave null to use the system default.
+  # Example — USB mic at index 0, USB speaker at index 1:
+  #   input_device: 0
+  #   output_device: 1
   input_device: null
   output_device: null
+  # Use the sample rate your microphone reports in list-devices (e.g. 44100).
+  # If the device doesn't natively support 16000 Hz, PortAudio will resample,
+  # which can cause recording issues on some Pi audio backends.
   sample_rate: 16000
   channels: 1
   record_seconds: 6
 
 stt:
-  provider: whisper_local
-  model: small
+  provider: whisper_local   # use 'mock' to skip transcription entirely
+  # Whisper model size — trade-off between speed and accuracy on Pi 5 CPU:
+  #   tiny  — fastest (~1s/clip), least accurate, ~75 MB download
+  #   base  — good balance (~2-3s/clip), ~140 MB download  ← recommended
+  #   small — slower (~5-8s/clip), more accurate, ~460 MB download
+  model: base
   language: en
 
 tts:
@@ -25,10 +37,13 @@ tts:
 brain:
   provider: ollama
   timeout_seconds: 60
+  allow_mock_fallback: false  # set true in dev to continue if Ollama is unreachable
 
 ollama:
   base_url: http://100.x.x.x:11434
   model: qwen3:8b
+  no_think: false   # set true for Qwen3 to skip chain-of-thought — faster voice responses
+  options: {}       # arbitrary Ollama inference params, e.g. num_predict: 200, temperature: 0.7
 
 openclaw:
   base_url: null

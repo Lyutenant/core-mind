@@ -58,11 +58,14 @@ class TTSConfig(BaseModel):
 class BrainConfig(BaseModel):
     provider: str = "ollama"
     timeout_seconds: int = 60
+    allow_mock_fallback: bool = False
 
 
 class OllamaConfig(BaseModel):
     base_url: str = "http://localhost:11434"
     model: str = "qwen3:8b"
+    no_think: bool = False
+    options: dict = {}
 
 
 class OpenClawConfig(BaseModel):

@@ -140,18 +140,165 @@ def audio_play_test(
 # Chat commands
 # ---------------------------------------------------------------------------
 
+def _build_voice_loop(settings):
+    from coremind import ConfigError, STTError
+    from coremind.audio_input.recorder import Recorder
+    from coremind.brain.ollama_client import MockBrainClient, OllamaClient
+    from coremind.brain.router import BrainRouter
+    from coremind.memory.session_memory import SessionMemory
+    from coremind.stt.whisper_local import MockSTT, WhisperLocalSTT
+    from coremind.voice_loop import VoiceLoop
+
+    acfg = settings.audio
+    recorder = Recorder(
+        device=acfg.input_device,
+        sample_rate=acfg.sample_rate,
+        channels=acfg.channels,
+    )
+
+    stt_provider = settings.stt.provider
+    if stt_provider == "whisper_local":
+        try:
+            stt = WhisperLocalSTT(model=settings.stt.model, language=settings.stt.language)
+        except STTError:
+            console.print(
+                "[yellow]Warning:[/yellow] faster-whisper not installed — using MockSTT. "
+                r"Run: pip install 'coremind\[stt]'"
+            )
+            stt = MockSTT()
+    elif stt_provider == "mock":
+        stt = MockSTT()
+    else:
+        raise ConfigError(
+            f"Unsupported stt.provider: {stt_provider!r}. "
+            "Supported values for Phase 2: whisper_local, mock."
+        )
+
+    provider = settings.brain.provider
+    if provider == "ollama":
+        primary = OllamaClient(
+            base_url=settings.ollama.base_url,
+            model=settings.ollama.model,
+            timeout=settings.brain.timeout_seconds,
+            no_think=settings.ollama.no_think,
+            options=settings.ollama.options,
+        )
+    elif provider == "mock":
+        primary = MockBrainClient()
+    else:
+        raise ConfigError(
+            f"Unsupported brain.provider: {provider!r}. "
+            "Supported values for Phase 2: ollama, mock."
+        )
+    fallback = MockBrainClient() if settings.brain.allow_mock_fallback else None
+    brain = BrainRouter(primary=primary, fallback=fallback)
+
+    memory = SessionMemory(max_turns=settings.memory.max_turns)
+    return VoiceLoop(
+        name=settings.app.name,
+        recorder=recorder,
+        stt=stt,
+        brain=brain,
+        memory=memory,
+        record_seconds=acfg.record_seconds,
+        status_fn=lambda msg: console.print(f"[dim]{msg}[/dim]"),
+    )
+
+
 @chat_app.command("once")
 def chat_once() -> None:
     """Record one utterance, transcribe it, and get an LLM response."""
-    console.print("[yellow]Voice chat not yet implemented (Phase 2).[/yellow]")
-    raise typer.Exit(code=0)
+    from coremind import AudioInputError, BrainError, STTError
+
+    settings = _get_settings()
+    loop = _build_voice_loop(settings)
+
+    console.print(
+        f"[bold]Press Enter to record ({settings.audio.record_seconds}s)...[/bold]",
+        end="",
+    )
+    try:
+        input()
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[yellow]Cancelled.[/yellow]")
+        raise typer.Exit(code=0)
+    console.print("[dim]Recording...[/dim]")
+
+    try:
+        transcript, response = loop.run_once()
+    except AudioInputError as e:
+        console.print(f"[red]Recording failed:[/red] {e}")
+        raise typer.Exit(code=1)
+    except STTError as e:
+        console.print(f"[red]Transcription failed:[/red] {e}")
+        raise typer.Exit(code=1)
+    except BrainError as e:
+        console.print(f"[red]LLM error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    if not transcript.strip():
+        console.print("[yellow]No speech detected.[/yellow]")
+        return
+
+    console.print(f"\n[bold]You:[/bold] {transcript}")
+    console.print(f"\n[bold cyan]{settings.app.name}:[/bold cyan] {response}")
 
 
 @chat_app.command("loop")
 def chat_loop() -> None:
-    """Start a continuous push-to-talk voice loop."""
-    console.print("[yellow]Voice loop not yet implemented (Phase 2).[/yellow]")
-    raise typer.Exit(code=0)
+    """Start a continuous push-to-talk voice loop. Press Ctrl+C to quit."""
+    from coremind import AudioInputError, BrainError, STTError
+
+    settings = _get_settings()
+    loop = _build_voice_loop(settings)
+
+    console.print(
+        f"[bold green]{settings.app.name} voice loop started.[/bold green] "
+        "Press Ctrl+C to quit.\n"
+    )
+
+    turn = 0
+    while True:
+        turn += 1
+        console.print(
+            f"[dim]Turn {turn} —[/dim] "
+            f"[bold]Press Enter to record ({settings.audio.record_seconds}s)...[/bold]",
+            end="",
+        )
+        try:
+            input()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Goodbye.[/yellow]")
+            break
+
+        console.print("[dim]Recording...[/dim]")
+
+        try:
+            transcript, response = loop.run_once()
+        except AudioInputError as e:
+            console.print(f"[red]Recording failed:[/red] {e}")
+            continue
+        except STTError as e:
+            console.print(f"[red]Transcription failed:[/red] {e}")
+            continue
+        except BrainError as e:
+            console.print(f"[red]LLM error:[/red] {e}")
+            if not settings.brain.allow_mock_fallback:
+                console.print(
+                    "[yellow]Tip:[/yellow] Set brain.allow_mock_fallback: true in config.yaml "
+                    "to continue with mock responses when Ollama is unreachable."
+                )
+            continue
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Goodbye.[/yellow]")
+            break
+
+        if not transcript.strip():
+            console.print("[yellow]No speech detected. Try again.[/yellow]")
+            continue
+
+        console.print(f"\n[bold]You:[/bold] {transcript}")
+        console.print(f"\n[bold cyan]{settings.app.name}:[/bold cyan] {response}\n")
 
 
 # ---------------------------------------------------------------------------

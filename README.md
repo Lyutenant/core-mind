@@ -2,7 +2,7 @@
 
 A Raspberry Pi 5 voice assistant. Records speech, transcribes it locally, sends to an LLM on a remote machine, and speaks the response aloud.
 
-**Status: Phase 1 — Audio Device Diagnostics**
+**Status: Phase 2 — Push-to-Talk Voice Loop**
 
 ## Hardware
 
@@ -26,6 +26,13 @@ pip install -e ".[dev]"
 cp config.example.yaml config.yaml
 # Edit config.yaml with your Ollama URL and preferred settings
 ```
+
+**Optional — local speech-to-text (required for real transcription):**
+```bash
+pip install 'coremind[stt]'
+```
+The Whisper model is downloaded from HuggingFace on first run (~140 MB for `base`, ~460 MB for `small`).
+Without this, the app falls back to `MockSTT` which always returns `[mock transcript]` instead of transcribing your speech.
 
 ## Configuration
 
@@ -94,7 +101,7 @@ coremind/
 |-------|-------------|
 | 0 | Repository setup ✓ |
 | 1 | Audio device diagnostics ✓ |
-| 2 | Push-to-talk voice loop |
+| 2 | Push-to-talk voice loop ✓ |
 | 3 | LLM backend / brain |
 | 4 | Speech-to-text |
 | 5 | Text-to-speech |

@@ -72,10 +72,32 @@ def test_list_devices_portaudio_error(mocker):
 # Recorder (mocked sounddevice + soundfile)
 # ---------------------------------------------------------------------------
 
+def _make_mock_input_stream(mocker, fake_chunk):
+    """Return a mock InputStream that fires the callback once with fake_chunk."""
+    captured_callback = {}
+
+    class MockStream:
+        def __init__(self, **kwargs):
+            captured_callback["fn"] = kwargs.get("callback")
+
+        def __enter__(self):
+            if captured_callback.get("fn"):
+                import sounddevice as sd
+                try:
+                    captured_callback["fn"](fake_chunk, len(fake_chunk), None, None)
+                except sd.CallbackStop:
+                    pass
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    mocker.patch("sounddevice.InputStream", MockStream)
+
+
 def test_recorder_saves_wav(mocker, tmp_path):
-    fake_audio = np.zeros((16000, 1), dtype="float32")
-    mocker.patch("sounddevice.rec", return_value=fake_audio)
-    mocker.patch("sounddevice.wait")
+    fake_chunk = np.zeros((16000, 1), dtype="float32")
+    _make_mock_input_stream(mocker, fake_chunk)
 
     out = tmp_path / "out.wav"
     recorder = Recorder(sample_rate=16000, channels=1)
@@ -89,8 +111,7 @@ def test_recorder_saves_wav(mocker, tmp_path):
 
 def test_recorder_raises_on_portaudio_error(mocker):
     import sounddevice as sd
-    mocker.patch("sounddevice.rec", side_effect=sd.PortAudioError("no mic"))
-    mocker.patch("sounddevice.wait")
+    mocker.patch("sounddevice.InputStream", side_effect=sd.PortAudioError("no mic"))
 
     recorder = Recorder()
     with pytest.raises(AudioInputError, match="Recording failed"):
