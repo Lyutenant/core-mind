@@ -141,8 +141,9 @@ def audio_play_test(
 # ---------------------------------------------------------------------------
 
 def _build_voice_loop(settings):
-    from coremind import ConfigError, STTError
+    from coremind import ConfigError, STTError, TTSError
     from coremind.audio_input.recorder import Recorder
+    from coremind.audio_output.player import Player
     from coremind.brain.ollama_client import MockBrainClient, OllamaClient
     from coremind.brain.router import BrainRouter
     from coremind.memory.session_memory import SessionMemory
@@ -171,7 +172,7 @@ def _build_voice_loop(settings):
     else:
         raise ConfigError(
             f"Unsupported stt.provider: {stt_provider!r}. "
-            "Supported values for Phase 2: whisper_local, mock."
+            "Supported: whisper_local, mock."
         )
 
     provider = settings.brain.provider
@@ -188,10 +189,40 @@ def _build_voice_loop(settings):
     else:
         raise ConfigError(
             f"Unsupported brain.provider: {provider!r}. "
-            "Supported values for Phase 2: ollama, mock."
+            "Supported: ollama, mock."
         )
     fallback = MockBrainClient() if settings.brain.allow_mock_fallback else None
     brain = BrainRouter(primary=primary, fallback=fallback)
+
+    tts = None
+    player = None
+    tts_provider = settings.tts.provider
+    if tts_provider == "piper_local":
+        from coremind.tts.piper_local import PiperLocalTTS
+        model_path = settings.tts.model_path
+        if not model_path:
+            console.print(
+                "[yellow]TTS disabled:[/yellow] tts.model_path not set. "
+                "Set it to your Piper .onnx model file path, or use provider: espeak."
+            )
+        else:
+            try:
+                tts = PiperLocalTTS(model_path=model_path)
+                player = Player(device=acfg.output_device)
+            except TTSError as e:
+                console.print(f"[yellow]TTS disabled:[/yellow] {e}")
+    elif tts_provider == "espeak":
+        from coremind.tts.piper_local import EspeakTTS
+        tts = EspeakTTS(voice=settings.tts.voice or "en")
+        player = Player(device=acfg.output_device)
+    elif tts_provider == "mock":
+        from coremind.tts.piper_local import MockTTS
+        tts = MockTTS()
+    else:
+        raise ConfigError(
+            f"Unsupported tts.provider: {tts_provider!r}. "
+            "Supported: piper_local, espeak, mock."
+        )
 
     memory = SessionMemory(max_turns=settings.memory.max_turns)
     return VoiceLoop(
@@ -202,6 +233,8 @@ def _build_voice_loop(settings):
         memory=memory,
         record_seconds=acfg.record_seconds,
         status_fn=lambda msg: console.print(f"[dim]{msg}[/dim]"),
+        tts=tts,
+        player=player,
     )
 
 
@@ -307,9 +340,54 @@ def chat_loop() -> None:
 
 @app.command("run")
 def run() -> None:
-    """Start CoreMind in full voice assistant mode."""
-    console.print("[yellow]Full run mode not yet implemented (Phase 6).[/yellow]")
-    raise typer.Exit(code=0)
+    """Start CoreMind in full voice assistant mode (record → transcribe → LLM → speak)."""
+    from coremind import AudioInputError, BrainError, STTError
+
+    settings = _get_settings()
+    loop = _build_voice_loop(settings)
+
+    console.print(
+        f"[bold green]{settings.app.name} ready.[/bold green] "
+        "Press Ctrl+C to quit.\n"
+    )
+
+    turn = 0
+    while True:
+        turn += 1
+        console.print(
+            f"[dim]Turn {turn} —[/dim] "
+            f"[bold]Press Enter to speak ({settings.audio.record_seconds}s)...[/bold]",
+            end="",
+        )
+        try:
+            input()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Goodbye.[/yellow]")
+            break
+
+        console.print("[dim]Recording...[/dim]")
+
+        try:
+            transcript, response = loop.run_once()
+        except AudioInputError as e:
+            console.print(f"[red]Recording failed:[/red] {e}")
+            continue
+        except STTError as e:
+            console.print(f"[red]Transcription failed:[/red] {e}")
+            continue
+        except BrainError as e:
+            console.print(f"[red]LLM error:[/red] {e}")
+            continue
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Goodbye.[/yellow]")
+            break
+
+        if not transcript.strip():
+            console.print("[yellow]No speech detected. Try again.[/yellow]")
+            continue
+
+        console.print(f"\n[bold]You:[/bold] {transcript}")
+        console.print(f"\n[bold cyan]{settings.app.name}:[/bold cyan] {response}\n")
 
 
 if __name__ == "__main__":

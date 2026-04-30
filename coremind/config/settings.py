@@ -52,7 +52,13 @@ class STTConfig(BaseModel):
 
 class TTSConfig(BaseModel):
     provider: str = "piper_local"
-    voice: Optional[str] = None
+    model_path: Optional[str] = None  # piper_local: path to .onnx voice model file
+    voice: Optional[str] = None       # espeak: voice variant (e.g. "en", "en+f3")
+
+    @field_validator("model_path")
+    @classmethod
+    def expand_model_path(cls, v: Optional[str]) -> Optional[str]:
+        return str(Path(v).expanduser()) if v is not None else None
 
 
 class BrainConfig(BaseModel):

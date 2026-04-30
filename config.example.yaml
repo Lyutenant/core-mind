@@ -31,7 +31,18 @@ stt:
   language: en
 
 tts:
+  # provider options:
+  #   piper_local — high-quality neural voice (recommended); requires model_path below
+  #   espeak      — robotic but zero-config; install: sudo apt install espeak-ng
+  #   mock        — silent, for testing only
   provider: piper_local
+  # piper_local only: path to a downloaded Piper .onnx voice model file.
+  # Download voices from https://github.com/rhasspy/piper-voices
+  # Example voices: en_US-amy-medium.onnx, en_US-ryan-high.onnx, en_GB-alan-medium.onnx
+  # Place the .onnx and .onnx.json files in the same directory.
+  # Example: /home/pi/piper-voices/en_US-amy-medium.onnx
+  model_path: null
+  # espeak only: voice variant (e.g. "en", "en+f3", "en-us"). Leave null for default.
   voice: null
 
 brain:

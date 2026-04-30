@@ -2,7 +2,7 @@
 
 A Raspberry Pi 5 voice assistant. Records speech, transcribes it locally, sends to an LLM on a remote machine, and speaks the response aloud.
 
-**Status: Phase 2 — Push-to-Talk Voice Loop**
+**Status: Phase 6 — Full MVP v0.1 (push-to-talk with speech output)**
 
 ## Hardware
 
@@ -34,6 +34,36 @@ pip install 'coremind[stt]'
 The Whisper model is downloaded from HuggingFace on first run (~140 MB for `base`, ~460 MB for `small`).
 Without this, the app falls back to `MockSTT` which always returns `[mock transcript]` instead of transcribing your speech.
 
+**Optional — text-to-speech:**
+
+*Piper (recommended — neural voice, offline):*
+```bash
+pip install piper-tts
+```
+Then download a voice model from [rhasspy/piper-voices](https://github.com/rhasspy/piper-voices).
+Download both the `.onnx` and `.onnx.json` files and set `tts.model_path` in `config.yaml`.
+
+```bash
+# Example: download the en_US-amy-medium voice (~60 MB)
+mkdir -p ~/piper-voices
+wget -P ~/piper-voices \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json
+```
+
+Then in `config.yaml`:
+```yaml
+tts:
+  provider: piper_local
+  model_path: /home/pi/piper-voices/en_US-amy-medium.onnx
+```
+
+*espeak-ng (simpler — robotic voice, no model download):*
+```bash
+sudo apt install espeak-ng
+```
+Then set `tts.provider: espeak` in `config.yaml`.
+
 ## Configuration
 
 Copy `config.example.yaml` to `config.yaml` and update:
@@ -41,6 +71,9 @@ Copy `config.example.yaml` to `config.yaml` and update:
 - `ollama.base_url` — Tailscale IP of your Mac Mini running Ollama
 - `ollama.model` — model name to use (e.g. `qwen3:8b`)
 - `audio.input_device` / `audio.output_device` — device index from `audio list-devices`, or leave null for system default
+- `audio.sample_rate` — set to your mic's native rate (e.g. `44100`) to avoid PortAudio resampling issues on Pi
+- `tts.provider` — `piper_local`, `espeak`, or `mock`
+- `tts.model_path` — full path to your Piper `.onnx` model file (piper_local only; `~` is expanded automatically)
 
 Sensitive values can be overridden with environment variables:
 
@@ -86,12 +119,12 @@ coremind/
   config/       Pydantic settings models
   audio_input/  Microphone recording
   audio_output/ Speaker playback
-  stt/          Speech-to-text backends
-  tts/          Text-to-speech backends
-  brain/        LLM client and router
+  stt/          Speech-to-text backends (Whisper, mock)
+  tts/          Text-to-speech backends (Piper, espeak, mock)
+  brain/        LLM client and router (Ollama, mock)
+  memory/       Session memory (short-term conversation context)
   wake_word/    Wake-word detection (Phase 7+)
   vad/          Voice activity detection (Phase 8+)
-  memory/       Session memory (Phase 9+)
   tools/        Tool registry (Phase 10+)
 ```
 
@@ -102,8 +135,8 @@ coremind/
 | 0 | Repository setup ✓ |
 | 1 | Audio device diagnostics ✓ |
 | 2 | Push-to-talk voice loop ✓ |
-| 3 | LLM backend / brain |
-| 4 | Speech-to-text |
-| 5 | Text-to-speech |
-| 6 | Full MVP v0.1 |
+| 3 | LLM backend / brain ✓ |
+| 4 | Speech-to-text ✓ |
+| 5 | Text-to-speech ✓ |
+| 6 | Full MVP v0.1 ✓ |
 | 7+ | Wake word, VAD, memory, tools |
