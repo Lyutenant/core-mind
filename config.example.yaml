@@ -52,7 +52,7 @@ brain:
 
 ollama:
   base_url: http://100.x.x.x:11434
-  model: qwen3:8b
+  model: qwen3.6:35b-a3b-q4_K_M
   no_think: false   # set true for Qwen3 to skip chain-of-thought — faster voice responses
   options: {}       # arbitrary Ollama inference params, e.g. num_predict: 200, temperature: 0.7
 
@@ -63,3 +63,43 @@ openclaw:
 memory:
   enabled: true
   max_turns: 10
+
+vad:
+  # Voice Activity Detection — stop recording automatically when you stop speaking.
+  # Used by the `run` command; push-to-talk commands use fixed-duration recording.
+  enabled: true
+  # RMS energy threshold (0.0–1.0). Lower = more sensitive. Raise if background noise triggers speech.
+  energy_threshold: 0.01
+  # Stop recording after this many seconds of silence.
+  silence_seconds: 1.2
+  # Hard cap on recording length (seconds).
+  max_record_seconds: 20.0
+  # Ignore utterances shorter than this (seconds). Filters accidental triggers.
+  min_speech_seconds: 0.3
+
+remote_brain:
+  # When enabled, the Pi sends audio to the Mac Mini server for STT + LLM + TTS.
+  # This offloads the slow CPU work from the Pi, reducing latency significantly.
+  # Run on Mac Mini: coremind server  (or: python -m coremind.server)
+  # Install server deps on Mac Mini: pip install 'coremind[server]'
+  enabled: false
+  # Tailscale or LAN IP of the Mac Mini running `coremind server`
+  url: http://100.x.x.x:8765
+  # How long to wait for the server to respond (seconds). Large models may need 90+s.
+  timeout_seconds: 90.0
+
+wake_word:
+  # Wake word detection — say a phrase to start a turn instead of pressing Enter.
+  # Requires: pip install openwakeword
+  # When disabled (or provider: dummy), the `run` command uses press-Enter push-to-talk.
+  enabled: false
+  # provider: dummy (press Enter) or openwakeword (always-on listening)
+  provider: dummy
+  # openwakeword built-in models: hey_jarvis_v0.1, hey_mycroft_v0.1, alexa_v0.1
+  # Or set to a path to a custom .onnx model file.
+  model: hey_jarvis_v0.1
+  # Detection confidence threshold (0.0–1.0). Higher = fewer false positives.
+  threshold: 0.5
+  # Inference backend: "onnx" (recommended — Pi-compatible, uses onnxruntime)
+  # or "tflite" (requires tflite_runtime compiled against your NumPy version).
+  inference_framework: onnx

@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import collections
+import queue
 import threading
+import time
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from coremind import AudioInputError
+
+if TYPE_CHECKING:
+    from coremind.vad.base import VoiceActivityDetector
 
 
 class Recorder:
@@ -66,5 +72,101 @@ class Recorder:
             sf.write(str(out), audio, self.sample_rate)
         except Exception as e:
             raise AudioInputError(f"Failed to save audio to {output_path}: {e}") from e
+
+        return out
+
+    def record_with_vad(
+        self,
+        vad: "VoiceActivityDetector",
+        silence_seconds: float = 1.2,
+        max_record_seconds: float = 20.0,
+        min_speech_seconds: float = 0.3,
+        output_path: Optional[str] = None,
+    ) -> Optional[Path]:
+        """Record until VAD detects end-of-speech.
+
+        Streams audio in 30 ms chunks using callback mode (Pi-compatible).
+        Returns the WAV path on success, or None if no speech was detected.
+        """
+        try:
+            import numpy as np
+            import sounddevice as sd
+            import soundfile as sf
+        except ImportError as e:
+            raise AudioInputError(
+                "Missing dependency: pip install sounddevice soundfile numpy"
+            ) from e
+
+        CHUNK_SECONDS = 0.03  # 30 ms per chunk
+        chunk_frames = int(self.sample_rate * CHUNK_SECONDS)
+        silence_chunks_needed = max(1, int(silence_seconds / CHUNK_SECONDS))
+        min_speech_chunks = max(1, int(min_speech_seconds / CHUNK_SECONDS))
+        PRESPEECH_BUF = 5  # ~150 ms pre-speech context
+
+        chunk_queue: queue.Queue = queue.Queue()
+
+        def _callback(indata, frame_count, time_info, status):
+            chunk_queue.put(indata.copy())
+
+        speech_chunks: list = []
+        prespeech_buf: collections.deque = collections.deque(maxlen=PRESPEECH_BUF)
+        silence_count = 0
+        speech_started = False
+        total_speech_chunks = 0
+
+        try:
+            with sd.InputStream(
+                samplerate=self.sample_rate,
+                channels=self.channels,
+                dtype="float32",
+                device=self.device,
+                blocksize=chunk_frames,
+                callback=_callback,
+            ):
+                deadline = time.monotonic() + max_record_seconds + 2.0
+                while time.monotonic() < deadline:
+                    remaining = deadline - time.monotonic()
+                    try:
+                        chunk = chunk_queue.get(timeout=min(0.5, remaining))
+                    except queue.Empty:
+                        break  # deadline reached
+
+                    pcm_bytes = (
+                        (chunk * 32767).clip(-32768, 32767).astype(np.int16).tobytes()
+                    )
+                    is_speech = vad.is_speech(pcm_bytes)
+
+                    if is_speech:
+                        if not speech_started:
+                            speech_started = True
+                            speech_chunks.extend(prespeech_buf)
+                        speech_chunks.append(chunk)
+                        silence_count = 0
+                        total_speech_chunks += 1
+                    elif speech_started:
+                        speech_chunks.append(chunk)
+                        silence_count += 1
+                        if silence_count >= silence_chunks_needed:
+                            break
+                    else:
+                        prespeech_buf.append(chunk)
+        except Exception as e:
+            raise AudioInputError(f"VAD recording failed: {e}") from e
+
+        if total_speech_chunks < min_speech_chunks:
+            return None
+
+        if output_path is None:
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                output_path = f.name
+
+        out = Path(output_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            audio = np.concatenate(speech_chunks)
+            sf.write(str(out), audio, self.sample_rate)
+        except Exception as e:
+            raise AudioInputError(f"Failed to save VAD-recorded audio: {e}") from e
 
         return out

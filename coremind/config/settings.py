@@ -79,9 +79,31 @@ class OpenClawConfig(BaseModel):
     agent: str = "coremind"
 
 
+class VADConfig(BaseModel):
+    enabled: bool = True
+    energy_threshold: float = 0.01
+    silence_seconds: float = 1.2
+    max_record_seconds: float = 20.0
+    min_speech_seconds: float = 0.3
+
+
+class WakeWordConfig(BaseModel):
+    enabled: bool = False
+    provider: str = "dummy"  # dummy or openwakeword
+    model: str = "hey_jarvis_v0.1"  # built-in name or path to .onnx
+    threshold: float = 0.5
+    inference_framework: str = "onnx"  # "onnx" (Pi-compatible) or "tflite"
+
+
 class MemoryConfig(BaseModel):
     enabled: bool = True
     max_turns: int = 10
+
+
+class RemoteBrainConfig(BaseModel):
+    enabled: bool = False
+    url: str = ""           # e.g. http://100.x.x.x:8765
+    timeout_seconds: float = 90.0
 
 
 class Settings(BaseSettings):
@@ -100,6 +122,9 @@ class Settings(BaseSettings):
     ollama: OllamaConfig = OllamaConfig()
     openclaw: OpenClawConfig = OpenClawConfig()
     memory: MemoryConfig = MemoryConfig()
+    vad: VADConfig = VADConfig()
+    wake_word: WakeWordConfig = WakeWordConfig()
+    remote_brain: RemoteBrainConfig = RemoteBrainConfig()
 
 
 def _coerce(val: str) -> object:

@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CoreMind Hub</title>
+  <style>
+    :root {
+      --bg:          #07101f;
+      --sidebar-bg:  #0a1628;
+      --card:        #0f1f35;
+      --card-alt:    #0c1a2e;
+      --border:      #1a2e48;
+      --border-hi:   #2a4a72;
+      --text:        #dce8f5;
+      --text-muted:  #5a7a9a;
+      --text-dim:    #2e4a6a;
+      --accent:      #3d8ef0;
+      --accent-soft: rgba(61,142,240,.12);
+      --success:     #22c55e;
+      --warning:     #f59e0b;
+      --error:       #ef4444;
+      --you-bg:      #1a3355;
+      --ai-bg:       #0d1f35;
+      --radius:      8px;
+      --font:        -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono:        'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.5;
+      overflow: hidden;
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      height: 100vh;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 0;
+      overflow: hidden;
+    }
+    .logo {
+      padding: 20px 16px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo-mark {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 4px;
+    }
+    .logo-icon {
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, var(--accent), #1a5fc0);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .logo-text { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
+    .logo-sub  { font-size: 10px; color: var(--text-muted); letter-spacing: .6px; text-transform: uppercase; }
+
+    .nav { padding: 10px 8px; flex: 1; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      transition: all .15s;
+      user-select: none;
+    }
+    .nav-item:hover { background: var(--accent-soft); color: var(--text); }
+    .nav-item.active { background: var(--accent-soft); color: var(--accent); }
+    .nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+
+    .sidebar-status {
+      padding: 14px 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+    .status-label { display: flex; align-items: center; gap: 6px; }
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text-dim);
+      flex-shrink: 0;
+      transition: background .3s;
+    }
+    .dot.ok     { background: var(--success); box-shadow: 0 0 5px var(--success); }
+    .dot.warn   { background: var(--warning); }
+    .dot.error  { background: var(--error); }
+    .dot.pulse  { animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+    .status-val { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+
+    /* ── Main ── */
+    .main { display: flex; flex-direction: column; overflow: hidden; }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card-alt);
+      flex-shrink: 0;
+      gap: 12px;
+    }
+    .topbar-title { font-size: 14px; font-weight: 600; color: var(--text); }
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .pill.ok    { border-color: var(--success); color: var(--success); background: rgba(34,197,94,.08); }
+    .pill.error { border-color: var(--error);   color: var(--error);   background: rgba(239,68,68,.08); }
+
+    /* ── View switching ── */
+    .view { display: none; flex: 1; overflow: hidden; }
+    .view.active { display: flex; flex-direction: column; }
+
+    /* ── Dashboard ── */
+    #view-dashboard {
+      flex-direction: row;
+    }
+    .conversation-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border);
+    }
+    .conversation-log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      scroll-behavior: smooth;
+    }
+    .conversation-log:empty::after {
+      content: 'No conversation yet. Say the wake word or press Enter on the Node to start.';
+      color: var(--text-dim);
+      font-size: 13px;
+      text-align: center;
+      margin: auto;
+    }
+    .turn-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: fadeIn .25s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+    .turn-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: var(--card-alt);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: var(--mono);
+    }
+    .turn-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .msg-row   { display: flex; flex-direction: column; gap: 3px; }
+    .msg-role  { font-size: 10px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; }
+    .msg-role.you { color: var(--accent); }
+    .msg-role.ai  { color: var(--success); }
+    .msg-text  { font-size: 13.5px; line-height: 1.55; color: var(--text); }
+
+    .processing-bar {
+      padding: 9px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--card-alt);
+      font-size: 11.5px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .spinner {
+      width: 10px; height: 10px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      display: none;
+    }
+    .spinner.active { display: block; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Stats sidebar (right of conversation) ── */
+    .stats-panel {
+      width: 220px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      overflow-y: auto;
+      padding: 16px 14px;
+      background: var(--sidebar-bg);
+    }
+    .stat-section { margin-bottom: 18px; }
+    .stat-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+    }
+    .stat-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .stat-item:last-child { border-bottom: none; }
+    .stat-key { color: var(--text-muted); }
+    .stat-val { color: var(--text); font-family: var(--mono); font-size: 11.5px; }
+    .stat-val.ok    { color: var(--success); }
+    .stat-val.error { color: var(--error); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text-muted);
+      transition: all .15s;
+    }
+    .btn:hover { border-color: var(--border-hi); color: var(--text); background: var(--card-alt); }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn.primary:hover { filter: brightness(1.1); }
+    .btn.danger { border-color: var(--error); color: var(--error); }
+    .btn.danger:hover { background: rgba(239,68,68,.08); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Settings view ── */
+    #view-settings {
+      overflow-y: auto;
+    }
+    .settings-wrap {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 24px 24px 48px;
+      width: 100%;
+    }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .settings-header h2 { font-size: 18px; font-weight: 700; }
+
+    .tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 4px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 6px 13px;
+      border-radius: 5px;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+      font-family: var(--font);
+    }
+    .tab-btn:hover { color: var(--text); background: var(--accent-soft); }
+    .tab-btn.active { background: var(--accent); color: #fff; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .form-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+    .form-section-title {
+      padding: 10px 16px;
+      background: var(--card-alt);
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .7px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+    }
+    .form-grid .field:nth-child(odd)  { border-right: 1px solid var(--border); }
+    .form-grid.single { grid-template-columns: 1fr; }
+    .field {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .field:last-child, .form-grid .field:nth-last-child(-n+2) { border-bottom: none; }
+    .field label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: .3px;
+    }
+    .field .hint {
+      font-size: 10.5px;
+      color: var(--text-dim);
+      line-height: 1.4;
+    }
+    input[type=text], input[type=number], input[type=url], select, textarea {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      font-size: 12.5px;
+      font-family: var(--font);
+      padding: 6px 9px;
+      width: 100%;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input[type=text]:focus,
+    input[type=number]:focus,
+    input[type=url]:focus,
+    select:focus,
+    textarea:focus { border-color: var(--accent); }
+    textarea { font-family: var(--mono); resize: vertical; min-height: 72px; }
+    select { appearance: none; cursor: pointer; }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .toggle-label { font-size: 12.5px; color: var(--text); }
+    .toggle {
+      position: relative;
+      width: 36px; height: 20px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-track {
+      position: absolute; inset: 0;
+      background: var(--border);
+      border-radius: 20px;
+      transition: background .2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--accent); }
+    .toggle-thumb {
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 14px; height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform .2s;
+    }
+    .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
+    .save-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .save-msg { font-size: 12px; color: var(--success); display: none; }
+    .save-msg.error { color: var(--error); }
+    .save-msg.visible { display: block; }
+
+    /* ── Toast ── */
+    .toast-container {
+      position: fixed;
+      bottom: 20px; right: 20px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 9999;
+    }
+    .toast {
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      background: var(--card);
+      border: 1px solid var(--border);
+      font-size: 12.5px;
+      color: var(--text);
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+      animation: fadeIn .2s ease;
+    }
+    .toast.success { border-color: var(--success); color: var(--success); }
+    .toast.error   { border-color: var(--error);   color: var(--error); }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">
+        <div class="logo-icon">🧠</div>
+        <div>
+          <div class="logo-text">CoreMind</div>
+          <div class="logo-sub">Hub</div>
+        </div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-item active" onclick="switchView('dashboard')" id="nav-dashboard">
+        <span class="nav-icon">💬</span> Dashboard
+      </div>
+      <div class="nav-item" onclick="switchView('settings')" id="nav-settings">
+        <span class="nav-icon">⚙️</span> Settings
+      </div>
+    </nav>
+
+    <div class="sidebar-status">
+      <div class="stat-title">System</div>
+      <div class="status-row">
+        <span class="status-label"><span class="dot" id="dot-ollama"></span> Ollama</span>
+        <span class="status-val" id="val-model">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label"><span class="dot" id="dot-stt"></span> STT</span>
+        <span class="status-val" id="val-stt">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label"><span class="dot" id="dot-tts"></span> TTS</span>
+        <span class="status-val" id="val-tts">—</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-right">
+        <span class="pill" id="pill-status">Idle</span>
+        <button class="btn" onclick="refreshHealth()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- Dashboard view -->
+    <section class="view active" id="view-dashboard">
+      <div class="conversation-panel">
+        <div class="conversation-log" id="conversation-log"></div>
+        <div class="processing-bar">
+          <div class="spinner" id="spinner"></div>
+          <span id="status-text">Idle — waiting for Node connection</span>
+        </div>
+      </div>
+      <div class="stats-panel">
+        <div class="stat-section">
+          <div class="stat-title">Session</div>
+          <div class="stat-item">
+            <span class="stat-key">Turns</span>
+            <span class="stat-val" id="stat-turns">0</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-key">Sessions</span>
+            <span class="stat-val" id="stat-sessions">0</span>
+          </div>
+        </div>
+        <div class="stat-section">
+          <div class="stat-title">Model</div>
+          <div class="stat-item">
+            <span class="stat-key">LLM</span>
+            <span class="stat-val" id="stat-model" style="word-break:break-all;font-size:10.5px;">—</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-key">STT</span>
+            <span class="stat-val" id="stat-stt">—</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-key">TTS</span>
+            <span class="stat-val" id="stat-tts">—</span>
+          </div>
+        </div>
+        <div class="stat-section">
+          <div class="stat-title">Actions</div>
+          <button class="btn danger" onclick="clearConversation()" style="width:100%;justify-content:center">
+            🗑 Clear Log
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Settings view -->
+    <section class="view" id="view-settings">
+      <div class="settings-wrap">
+        <div class="settings-header">
+          <h2>Hub Settings</h2>
+        </div>
+
+        <div class="tabs" id="settings-tabs">
+          <button class="tab-btn active" onclick="switchTab('app')">App</button>
+          <button class="tab-btn" onclick="switchTab('stt')">STT</button>
+          <button class="tab-btn" onclick="switchTab('tts')">TTS</button>
+          <button class="tab-btn" onclick="switchTab('ollama')">Ollama</button>
+          <button class="tab-btn" onclick="switchTab('memory')">Memory</button>
+          <button class="tab-btn" onclick="switchTab('vad')">VAD</button>
+          <button class="tab-btn" onclick="switchTab('wake_word')">Wake Word</button>
+          <button class="tab-btn" onclick="switchTab('audio')">Audio</button>
+          <button class="tab-btn" onclick="switchTab('remote_brain')">Remote Brain</button>
+        </div>
+
+        <!-- Tab: App -->
+        <div class="tab-panel active" id="tab-app">
+          <div class="form-section">
+            <div class="form-section-title">Application</div>
+            <div class="form-grid">
+              <div class="field">
+                <label>Assistant Name</label>
+                <input type="text" id="app.name" placeholder="Jarvis">
+                <span class="hint">What CoreMind Node calls itself when speaking.</span>
+              </div>
+              <div class="field">
+                <label>Log Level</label>
+                <select id="app.log_level">
+                  <option>DEBUG</option><option>INFO</option>
+                  <option>WARNING</option><option>ERROR</option><option>CRITICAL</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: STT -->
+        <div class="tab-panel" id="tab-stt">
+          <div class="form-section">
+            <div class="form-section-title">Speech-to-Text</div>
+            <div class="form-grid">
+              <div class="field">
+                <label>Provider</label>
+                <select id="stt.provider">
+                  <option value="whisper_local">whisper_local (faster-whisper)</option>
+                  <option value="mock">mock (testing only)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Whisper Model</label>
+                <select id="stt.model">
+                  <option value="tiny">tiny — fastest, ~75 MB</option>
+                  <option value="base">base — recommended, ~140 MB</option>
+                  <option value="small">small — accurate, ~460 MB</option>
+                  <option value="medium">medium — slow on CPU</option>
+                  <option value="large">large — very slow on CPU</option>
+                </select>
+                <span class="hint">Downloaded from HuggingFace on first use.</span>
+              </div>
+              <div class="field">
+                <label>Language</label>
+                <input type="text" id="stt.language" placeholder="en">
+                <span class="hint">BCP-47 code, e.g. en, zh, fr, de.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: TTS -->
+        <div class="tab-panel" id="tab-tts">
+          <div class="form-section">
+            <div class="form-section-title">Text-to-Speech</div>
+            <div class="form-grid">
+              <div class="field">
+                <label>Provider</label>
+                <select id="tts.provider">
+                  <option value="piper_local">piper_local (neural, offline)</option>
+                  <option value="espeak">espeak (robotic, zero-config)</option>
+                  <option value="mock">mock (silent, testing)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Piper Model Path</label>
+                <input type="text" id="tts.model_path" placeholder="/path/to/en_US-amy-medium.onnx">
+                <span class="hint">Full path to .onnx file. Leave blank for espeak/mock.</span>
+              </div>
+              <div class="field">
+                <label>espeak Voice</label>
+                <input type="text" id="tts.voice" placeholder="en">
+                <span class="hint">e.g. en, en+f3, en-us. Only for espeak provider.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Ollama -->
+        <div class="tab-panel" id="tab-ollama">
+          <div class="form-section">
+            <div class="form-section-title">Ollama Connection</div>
+            <div class="form-grid single">
+              <div class="field">
+                <label>Base URL</label>
+                <input type="url" id="ollama.base_url" placeholder="http://localhost:11434">
+                <span class="hint">URL of the Ollama server. Use Tailscale IP for remote machines.</span>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label>Model</label>
+                <input type="text" id="ollama.model" placeholder="qwen3:8b">
+                <span class="hint">Must be pulled on the Ollama server.</span>
+              </div>
+              <div class="field">
+                <label>Brain Provider</label>
+                <select id="brain.provider">
+                  <option value="ollama">ollama</option>
+                  <option value="mock">mock (testing)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Request Timeout (s)</label>
+                <input type="number" id="brain.timeout_seconds" min="5" max="300" step="5">
+              </div>
+              <div class="field">
+                <label class="toggle-row">
+                  <span class="toggle-label">No-Think Mode</span>
+                  <label class="toggle">
+                    <input type="checkbox" id="ollama.no_think">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-thumb"></span>
+                  </label>
+                </label>
+                <span class="hint">Skips chain-of-thought for Qwen3 — faster voice responses.</span>
+              </div>
+              <div class="field">
+                <label class="toggle-row">
+                  <span class="toggle-label">Allow Mock Fallback</span>
+                  <label class="toggle">
+                    <input type="checkbox" id="brain.allow_mock_fallback">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-thumb"></span>
+                  </label>
+                </label>
+                <span class="hint">Continue with mock responses if Ollama is unreachable. Dev only.</span>
+              </div>
+            </div>
+            <div class="form-grid single">
+              <div class="field">
+                <label>Inference Options (JSON)</label>
+                <textarea id="ollama.options" rows="3" placeholder='{"num_predict": 200, "temperature": 0.7}'></textarea>
+                <span class="hint">Arbitrary Ollama parameters as JSON object. Leave {} for defaults.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Memory -->
+        <div class="tab-panel" id="tab-memory">
+          <div class="form-section">
+            <div class="form-section-title">Session Memory</div>
+            <div class="form-grid">
+              <div class="field">
+                <label class="toggle-row">
+                  <span class="toggle-label">Enabled</span>
+                  <label class="toggle">
+                    <input type="checkbox" id="memory.enabled">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-thumb"></span>
+                  </label>
+                </label>
+                <span class="hint">Include conversation history in each LLM request.</span>
+              </div>
+              <div class="field">
+                <label>Max Turns in Context</label>
+                <input type="number" id="memory.max_turns" min="1" max="50" step="1">
+                <span class="hint">Older turns are dropped when limit is reached.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: VAD -->
+        <div class="tab-panel" id="tab-vad">
+          <div class="form-section">
+            <div class="form-section-title">Voice Activity Detection</div>
+            <div class="form-grid">
+              <div class="field">
+                <label class="toggle-row">
+                  <span class="toggle-label">Enabled</span>
+                  <label class="toggle">
+                    <input type="checkbox" id="vad.enabled">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-thumb"></span>
+                  </label>
+                </label>
+                <span class="hint">Auto-stop recording when speech ends. Used by Node.</span>
+              </div>
+              <div class="field">
+                <label>Energy Threshold (0.0–1.0)</label>
+                <input type="number" id="vad.energy_threshold" min="0" max="1" step="0.001">
+                <span class="hint">Lower = more sensitive. Raise if noise triggers false starts.</span>
+              </div>
+              <div class="field">
+                <label>Silence to Stop (s)</label>
+                <input type="number" id="vad.silence_seconds" min="0.3" max="5" step="0.1">
+              </div>
+              <div class="field">
+                <label>Max Record Duration (s)</label>
+                <input type="number" id="vad.max_record_seconds" min="5" max="120" step="1">
+              </div>
+              <div class="field">
+                <label>Min Speech Length (s)</label>
+                <input type="number" id="vad.min_speech_seconds" min="0.1" max="2" step="0.1">
+                <span class="hint">Ignore utterances shorter than this — filters accidental triggers.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Wake Word -->
+        <div class="tab-panel" id="tab-wake_word">
+          <div class="form-section">
+            <div class="form-section-title">Wake Word Detection</div>
+            <div class="form-grid">
+              <div class="field">
+                <label class="toggle-row">
+                  <span class="toggle-label">Enabled</span>
+                  <label class="toggle">
+                    <input type="checkbox" id="wake_word.enabled">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-thumb"></span>
+                  </label>
+                </label>
+                <span class="hint">Requires openwakeword on the Node (Pi).</span>
+              </div>
+              <div class="field">
+                <label>Provider</label>
+                <select id="wake_word.provider">
+                  <option value="dummy">dummy (press Enter)</option>
+                  <option value="openwakeword">openwakeword</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Model</label>
+                <input type="text" id="wake_word.model" placeholder="hey_jarvis_v0.1">
+                <span class="hint">Built-in: hey_jarvis_v0.1, hey_mycroft_v0.1, alexa_v0.1. Or path to .onnx file.</span>
+              </div>
+              <div class="field">
+                <label>Detection Threshold (0.0–1.0)</label>
+                <input type="number" id="wake_word.threshold" min="0" max="1" step="0.01">
+                <span class="hint">Higher = fewer false positives. Start at 0.5.</span>
+              </div>
+              <div class="field">
+                <label>Inference Framework</label>
+                <select id="wake_word.inference_framework">
+                  <option value="onnx">onnx (recommended — Pi NumPy 2.x compatible)</option>
+                  <option value="tflite">tflite (requires tflite_runtime + NumPy 1.x)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Audio -->
+        <div class="tab-panel" id="tab-audio">
+          <div class="form-section">
+            <div class="form-section-title">Audio Devices</div>
+            <div class="form-grid">
+              <div class="field">
+                <label>Input Device Index</label>
+                <input type="number" id="audio.input_device" min="0" step="1" placeholder="null (system default)">
+                <span class="hint">Run 'coremind audio list-devices' on the Node to find the index.</span>
+              </div>
+              <div class="field">
+                <label>Output Device Index</label>
+                <input type="number" id="audio.output_device" min="0" step="1" placeholder="null (system default)">
+              </div>
+              <div class="field">
+                <label>Sample Rate (Hz)</label>
+                <input type="number" id="audio.sample_rate" min="8000" max="192000" step="100">
+                <span class="hint">Match your mic's native rate (e.g. 44100) to avoid resampling.</span>
+              </div>
+              <div class="field">
+                <label>Channels</label>
+                <input type="number" id="audio.channels" min="1" max="8" step="1">
+              </div>
+              <div class="field">
+                <label>Fixed Record Duration (s)</label>
+                <input type="number" id="audio.record_seconds" min="1" max="30" step="1">
+                <span class="hint">Used when VAD is disabled (push-to-talk mode).</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Remote Brain -->
+        <div class="tab-panel" id="tab-remote_brain">
+          <div class="form-section">
+            <div class="form-section-title">Remote Brain (Node → Hub)</div>
+            <div class="form-grid">
+              <div class="field">
+                <label class="toggle-row">
+                  <span class="toggle-label">Enabled</span>
+                  <label class="toggle">
+                    <input type="checkbox" id="remote_brain.enabled">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-thumb"></span>
+                  </label>
+                </label>
+                <span class="hint">When enabled on the Node (Pi), all audio is sent to the Hub for processing.</span>
+              </div>
+              <div class="field">
+                <label>Hub URL</label>
+                <input type="url" id="remote_brain.url" placeholder="http://100.x.x.x:8765">
+                <span class="hint">Tailscale or LAN IP of the Mac Mini running 'coremind server'.</span>
+              </div>
+              <div class="field">
+                <label>Timeout (s)</label>
+                <input type="number" id="remote_brain.timeout_seconds" min="10" max="300" step="5">
+                <span class="hint">Allow extra time for large LLM models to respond.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Save -->
+        <div class="save-row">
+          <button class="btn primary" onclick="saveConfig()" id="btn-save">💾 Save Configuration</button>
+          <button class="btn" onclick="refreshHealth()">Test Connections</button>
+          <span class="save-msg" id="save-msg"></span>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /.main -->
+</div><!-- /.layout -->
+
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let currentView = 'dashboard';
+let currentTab  = 'app';
+let es = null;          // EventSource
+let pendingTurn = null; // in-progress turn (transcript received, waiting for response)
+
+// ── View switching ──────────────────────────────────────────────────────────
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  document.getElementById('nav-' + name).classList.add('active');
+  document.getElementById('topbar-title').textContent =
+    name === 'dashboard' ? 'Dashboard' : 'Hub Settings';
+  currentView = name;
+  if (name === 'settings') loadConfig();
+}
+
+// ── Tab switching ───────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+  currentTab = name;
+}
+
+// ── Toast ───────────────────────────────────────────────────────────────────
+function toast(msg, type = '') {
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Status bar ──────────────────────────────────────────────────────────────
+function setStatus(text, active = false) {
+  document.getElementById('status-text').textContent = text;
+  document.getElementById('spinner').classList.toggle('active', active);
+  const pill = document.getElementById('pill-status');
+  pill.textContent = text;
+  pill.className = 'pill' + (active ? '' : '');
+}
+
+// ── Health refresh ──────────────────────────────────────────────────────────
+async function refreshHealth() {
+  try {
+    const h = await fetch('/api/health').then(r => r.json());
+    // Sidebar dots
+    setDot('dot-ollama', h.ollama_reachable ? 'ok' : 'error');
+    setDot('dot-stt', h.stt_loaded ? 'ok' : 'warn');
+    setDot('dot-tts', h.tts_loaded ? 'ok' : 'warn');
+    // Sidebar values
+    setText('val-model',   shortModel(h.model));
+    setText('val-stt',     h.stt_model || h.stt_provider);
+    setText('val-tts',     h.tts_provider);
+    // Stats panel
+    setText('stat-turns',    h.turn_count);
+    setText('stat-sessions', h.session_count);
+    setText('stat-model',    h.model);
+    setText('stat-stt',      h.stt_model || h.stt_provider);
+    setText('stat-tts',      h.tts_provider);
+  } catch (e) {
+    setDot('dot-ollama', 'error');
+    toast('Hub unreachable', 'error');
+  }
+}
+
+function setDot(id, cls) {
+  const el = document.getElementById(id);
+  el.className = 'dot ' + cls;
+}
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val ?? '—';
+}
+function shortModel(m) {
+  if (!m) return '—';
+  return m.length > 16 ? m.slice(0, 14) + '…' : m;
+}
+
+// ── Conversation ────────────────────────────────────────────────────────────
+async function loadConversation() {
+  const turns = await fetch('/api/conversation').then(r => r.json());
+  const log = document.getElementById('conversation-log');
+  log.innerHTML = '';
+  turns.forEach(addTurnCard);
+}
+
+function addTurnCard(turn) {
+  const log = document.getElementById('conversation-log');
+  const card = document.createElement('div');
+  card.className = 'turn-card';
+  card.id = 'turn-' + turn.turn;
+  const ts = new Date(turn.timestamp).toLocaleTimeString();
+  card.innerHTML = `
+    <div class="turn-header">
+      <span>Turn ${turn.turn}</span>
+      <span>${ts}</span>
+    </div>
+    <div class="turn-body">
+      <div class="msg-row">
+        <div class="msg-role you">You</div>
+        <div class="msg-text">${esc(turn.transcript)}</div>
+      </div>
+      <div class="msg-row">
+        <div class="msg-role ai" id="role-${turn.turn}">Jarvis</div>
+        <div class="msg-text" id="resp-${turn.turn}">${esc(turn.response)}</div>
+      </div>
+    </div>`;
+  log.appendChild(card);
+  log.scrollTop = log.scrollHeight;
+}
+
+function addPendingCard(transcript) {
+  const log = document.getElementById('conversation-log');
+  const id = 'pending';
+  let card = document.getElementById('turn-' + id);
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'turn-card';
+    card.id = 'turn-' + id;
+    log.appendChild(card);
+  }
+  card.innerHTML = `
+    <div class="turn-header"><span>Processing…</span></div>
+    <div class="turn-body">
+      <div class="msg-row">
+        <div class="msg-role you">You</div>
+        <div class="msg-text">${esc(transcript)}</div>
+      </div>
+      <div class="msg-row">
+        <div class="msg-role ai">Jarvis</div>
+        <div class="msg-text" style="color:var(--text-dim)">Thinking…</div>
+      </div>
+    </div>`;
+  log.scrollTop = log.scrollHeight;
+}
+
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function clearConversation() {
+  if (!confirm('Clear all conversation history?')) return;
+  await fetch('/api/conversation', { method: 'DELETE' });
+  document.getElementById('conversation-log').innerHTML = '';
+  toast('Conversation cleared');
+}
+
+// ── SSE ─────────────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (es) es.close();
+  es = new EventSource('/api/events');
+  es.onmessage = (e) => {
+    const ev = JSON.parse(e.data);
+    handleEvent(ev);
+  };
+  es.onerror = () => {
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+function handleEvent(ev) {
+  switch (ev.type) {
+    case 'ping': break;
+    case 'status':
+      const active = ev.text !== 'Idle';
+      setStatus(ev.text, active);
+      break;
+    case 'transcript':
+      addPendingCard(ev.text);
+      break;
+    case 'turn':
+      // Remove pending card and add final card
+      const pending = document.getElementById('turn-pending');
+      if (pending) pending.remove();
+      addTurnCard(ev);
+      refreshHealth();
+      break;
+    case 'config_saved':
+      toast('Configuration saved', 'success');
+      refreshHealth();
+      break;
+    case 'conversation_cleared':
+      document.getElementById('conversation-log').innerHTML = '';
+      break;
+  }
+}
+
+// ── Config load/save ─────────────────────────────────────────────────────────
+async function loadConfig() {
+  try {
+    const cfg = await fetch('/api/config').then(r => r.json());
+    applyConfig(cfg);
+  } catch (e) {
+    toast('Failed to load config', 'error');
+  }
+}
+
+function applyConfig(cfg) {
+  const flat = flatten(cfg);
+  for (const [key, val] of Object.entries(flat)) {
+    const el = document.getElementById(key);
+    if (!el) continue;
+    if (el.type === 'checkbox') {
+      el.checked = !!val;
+    } else if (key === 'ollama.options') {
+      el.value = (val && Object.keys(val).length) ? JSON.stringify(val, null, 2) : '';
+    } else if (val === null || val === undefined) {
+      el.value = '';
+    } else {
+      el.value = val;
+    }
+  }
+}
+
+async function saveConfig() {
+  const btn = document.getElementById('btn-save');
+  const msg = document.getElementById('save-msg');
+  btn.disabled = true;
+  msg.className = 'save-msg';
+
+  let cfg;
+  try {
+    cfg = buildConfig();
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'save-msg error visible';
+    btn.disabled = false;
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Server error');
+    }
+    msg.textContent = '✓ Saved';
+    msg.className = 'save-msg visible';
+    toast('Configuration saved', 'success');
+    setTimeout(() => { msg.className = 'save-msg'; }, 3000);
+  } catch (e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.className = 'save-msg error visible';
+    toast('Save failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function buildConfig() {
+  const g = (id, nullable = false) => {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    if (el.type === 'checkbox') return el.checked;
+    const v = el.value.trim();
+    if (nullable && v === '') return null;
+    return v;
+  };
+  const n = (id, nullable = false) => {
+    const v = g(id, nullable);
+    if (v === null) return null;
+    if (v === '') return nullable ? null : 0;
+    const num = Number(v);
+    if (isNaN(num)) throw new Error(`${id}: expected a number`);
+    return num;
+  };
+  let options = {};
+  const optVal = document.getElementById('ollama.options').value.trim();
+  if (optVal) {
+    try { options = JSON.parse(optVal); }
+    catch (e) { throw new Error('ollama.options: invalid JSON'); }
+  }
+  return {
+    app:    { name: g('app.name'), log_level: g('app.log_level') },
+    runtime: { mode: 'push_to_talk', require_confirmation_for_actions: true },
+    audio: {
+      input_device:   n('audio.input_device', true),
+      output_device:  n('audio.output_device', true),
+      sample_rate:    n('audio.sample_rate'),
+      channels:       n('audio.channels'),
+      record_seconds: n('audio.record_seconds'),
+    },
+    stt: { provider: g('stt.provider'), model: g('stt.model').split(' ')[0], language: g('stt.language') },
+    tts: { provider: g('tts.provider'), model_path: g('tts.model_path', true), voice: g('tts.voice', true) },
+    brain: {
+      provider: g('brain.provider'),
+      timeout_seconds: n('brain.timeout_seconds'),
+      allow_mock_fallback: g('brain.allow_mock_fallback'),
+    },
+    ollama: {
+      base_url: g('ollama.base_url'),
+      model: g('ollama.model'),
+      no_think: g('ollama.no_think'),
+      options,
+    },
+    openclaw: { base_url: null, agent: 'coremind' },
+    memory:  { enabled: g('memory.enabled'), max_turns: n('memory.max_turns') },
+    vad: {
+      enabled: g('vad.enabled'),
+      energy_threshold: n('vad.energy_threshold'),
+      silence_seconds: n('vad.silence_seconds'),
+      max_record_seconds: n('vad.max_record_seconds'),
+      min_speech_seconds: n('vad.min_speech_seconds'),
+    },
+    wake_word: {
+      enabled: g('wake_word.enabled'),
+      provider: g('wake_word.provider'),
+      model: g('wake_word.model'),
+      threshold: n('wake_word.threshold'),
+      inference_framework: g('wake_word.inference_framework').split(' ')[0],
+    },
+    remote_brain: {
+      enabled: g('remote_brain.enabled'),
+      url: g('remote_brain.url'),
+      timeout_seconds: n('remote_brain.timeout_seconds'),
+    },
+  };
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function flatten(obj, prefix = '', out = {}) {
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      flatten(v, key, out);
+    } else {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  connectSSE();
+  refreshHealth();
+  loadConversation();
+  setInterval(refreshHealth, 30000);
+});
+</script>
+</body>
+</html>

@@ -140,14 +140,10 @@ def audio_play_test(
 # Chat commands
 # ---------------------------------------------------------------------------
 
-def _build_voice_loop(settings):
-    from coremind import ConfigError, STTError, TTSError
+def _build_voice_loop(settings, *, enable_wake_word: bool = False, enable_vad: bool = False):
+    from coremind import ConfigError, STTError, TTSError, WakeWordError
     from coremind.audio_input.recorder import Recorder
     from coremind.audio_output.player import Player
-    from coremind.brain.ollama_client import MockBrainClient, OllamaClient
-    from coremind.brain.router import BrainRouter
-    from coremind.memory.session_memory import SessionMemory
-    from coremind.stt.whisper_local import MockSTT, WhisperLocalSTT
     from coremind.voice_loop import VoiceLoop
 
     acfg = settings.audio
@@ -157,74 +153,135 @@ def _build_voice_loop(settings):
         channels=acfg.channels,
     )
 
-    stt_provider = settings.stt.provider
-    if stt_provider == "whisper_local":
-        try:
-            stt = WhisperLocalSTT(model=settings.stt.model, language=settings.stt.language)
-        except STTError:
-            console.print(
-                "[yellow]Warning:[/yellow] faster-whisper not installed — using MockSTT. "
-                r"Run: pip install 'coremind\[stt]'"
-            )
-            stt = MockSTT()
-    elif stt_provider == "mock":
-        stt = MockSTT()
-    else:
-        raise ConfigError(
-            f"Unsupported stt.provider: {stt_provider!r}. "
-            "Supported: whisper_local, mock."
-        )
-
-    provider = settings.brain.provider
-    if provider == "ollama":
-        primary = OllamaClient(
-            base_url=settings.ollama.base_url,
-            model=settings.ollama.model,
-            timeout=settings.brain.timeout_seconds,
-            no_think=settings.ollama.no_think,
-            options=settings.ollama.options,
-        )
-    elif provider == "mock":
-        primary = MockBrainClient()
-    else:
-        raise ConfigError(
-            f"Unsupported brain.provider: {provider!r}. "
-            "Supported: ollama, mock."
-        )
-    fallback = MockBrainClient() if settings.brain.allow_mock_fallback else None
-    brain = BrainRouter(primary=primary, fallback=fallback)
-
-    tts = None
-    player = None
-    tts_provider = settings.tts.provider
-    if tts_provider == "piper_local":
-        from coremind.tts.piper_local import PiperLocalTTS
-        model_path = settings.tts.model_path
-        if not model_path:
-            console.print(
-                "[yellow]TTS disabled:[/yellow] tts.model_path not set. "
-                "Set it to your Piper .onnx model file path, or use provider: espeak."
-            )
-        else:
-            try:
-                tts = PiperLocalTTS(model_path=model_path)
-                player = Player(device=acfg.output_device)
-            except TTSError as e:
-                console.print(f"[yellow]TTS disabled:[/yellow] {e}")
-    elif tts_provider == "espeak":
-        from coremind.tts.piper_local import EspeakTTS
-        tts = EspeakTTS(voice=settings.tts.voice or "en")
+    # Remote mode: Pi is audio-only terminal; Mac Mini handles STT + LLM + TTS.
+    remote_cfg = settings.remote_brain
+    if remote_cfg.enabled:
+        if not remote_cfg.url:
+            raise ConfigError("remote_brain.enabled is true but remote_brain.url is not set.")
+        console.print(f"[dim]Remote brain: {remote_cfg.url}[/dim]")
+        stt = None
+        brain = None
+        memory = None
+        tts = None
         player = Player(device=acfg.output_device)
-    elif tts_provider == "mock":
-        from coremind.tts.piper_local import MockTTS
-        tts = MockTTS()
     else:
-        raise ConfigError(
-            f"Unsupported tts.provider: {tts_provider!r}. "
-            "Supported: piper_local, espeak, mock."
+        from coremind.brain.ollama_client import MockBrainClient, OllamaClient
+        from coremind.brain.router import BrainRouter
+        from coremind.memory.session_memory import SessionMemory
+        from coremind.stt.whisper_local import MockSTT, WhisperLocalSTT
+
+        stt_provider = settings.stt.provider
+        if stt_provider == "whisper_local":
+            try:
+                stt = WhisperLocalSTT(model=settings.stt.model, language=settings.stt.language)
+            except STTError:
+                console.print(
+                    "[yellow]Warning:[/yellow] faster-whisper not installed — using MockSTT. "
+                    r"Run: pip install 'coremind\[stt]'"
+                )
+                stt = MockSTT()
+        elif stt_provider == "mock":
+            stt = MockSTT()
+        else:
+            raise ConfigError(
+                f"Unsupported stt.provider: {stt_provider!r}. "
+                "Supported: whisper_local, mock."
+            )
+
+        provider = settings.brain.provider
+        if provider == "ollama":
+            primary = OllamaClient(
+                base_url=settings.ollama.base_url,
+                model=settings.ollama.model,
+                timeout=settings.brain.timeout_seconds,
+                no_think=settings.ollama.no_think,
+                options=settings.ollama.options,
+            )
+        elif provider == "mock":
+            primary = MockBrainClient()
+        else:
+            raise ConfigError(
+                f"Unsupported brain.provider: {provider!r}. "
+                "Supported: ollama, mock."
+            )
+        fallback = MockBrainClient() if settings.brain.allow_mock_fallback else None
+        brain = BrainRouter(primary=primary, fallback=fallback)
+
+        tts = None
+        player = None
+        tts_provider = settings.tts.provider
+        if tts_provider == "piper_local":
+            from coremind.tts.piper_local import PiperLocalTTS
+            model_path = settings.tts.model_path
+            if not model_path:
+                console.print(
+                    "[yellow]TTS disabled:[/yellow] tts.model_path not set. "
+                    "Set it to your Piper .onnx model file path, or use provider: espeak."
+                )
+            else:
+                try:
+                    tts = PiperLocalTTS(model_path=model_path)
+                    player = Player(device=acfg.output_device)
+                except TTSError as e:
+                    console.print(f"[yellow]TTS disabled:[/yellow] {e}")
+        elif tts_provider == "espeak":
+            from coremind.tts.piper_local import EspeakTTS
+            tts = EspeakTTS(voice=settings.tts.voice or "en")
+            player = Player(device=acfg.output_device)
+        elif tts_provider == "mock":
+            from coremind.tts.piper_local import MockTTS
+            tts = MockTTS()
+        else:
+            raise ConfigError(
+                f"Unsupported tts.provider: {tts_provider!r}. "
+                "Supported: piper_local, espeak, mock."
+            )
+
+        memory = SessionMemory(max_turns=settings.memory.max_turns)
+
+    # VAD
+    vad = None
+    if enable_vad and settings.vad.enabled:
+        from coremind.vad.simple_energy import SimpleEnergyVAD
+        vad = SimpleEnergyVAD(threshold=settings.vad.energy_threshold)
+        console.print(
+            f"[dim]VAD enabled (threshold={settings.vad.energy_threshold}, "
+            f"silence={settings.vad.silence_seconds}s, "
+            f"max={settings.vad.max_record_seconds}s)[/dim]"
         )
 
-    memory = SessionMemory(max_turns=settings.memory.max_turns)
+    # Wake word
+    wake_word = None
+    if enable_wake_word:
+        wwcfg = settings.wake_word
+        if not wwcfg.enabled or wwcfg.provider == "dummy":
+            from coremind.wake_word.dummy import DummyWakeWordDetector
+            wake_word = DummyWakeWordDetector()
+        elif wwcfg.provider == "openwakeword":
+            from coremind.wake_word.openwakeword_engine import OpenWakeWordDetector
+            try:
+                wake_word = OpenWakeWordDetector(
+                    model=wwcfg.model,
+                    threshold=wwcfg.threshold,
+                    device=acfg.input_device,
+                    sample_rate=16000,  # openwakeword always requires 16 kHz
+                    inference_framework=wwcfg.inference_framework,
+                )
+                console.print(
+                    f"[dim]Wake word: {wwcfg.model} (threshold={wwcfg.threshold})[/dim]"
+                )
+            except WakeWordError as e:
+                console.print(
+                    f"[yellow]Wake word disabled:[/yellow] {e} — falling back to push-to-talk."
+                )
+                from coremind.wake_word.dummy import DummyWakeWordDetector
+                wake_word = DummyWakeWordDetector()
+        else:
+            raise ConfigError(
+                f"Unsupported wake_word.provider: {wwcfg.provider!r}. "
+                "Supported: dummy, openwakeword."
+            )
+
     return VoiceLoop(
         name=settings.app.name,
         recorder=recorder,
@@ -235,6 +292,14 @@ def _build_voice_loop(settings):
         status_fn=lambda msg: console.print(f"[dim]{msg}[/dim]"),
         tts=tts,
         player=player,
+        wake_word=wake_word,
+        wake_fn=lambda: console.print("[bold green]Wake word detected![/bold green] Speak your question...") if wake_word is not None else None,
+        vad=vad,
+        vad_silence_seconds=settings.vad.silence_seconds,
+        vad_max_record_seconds=settings.vad.max_record_seconds,
+        vad_min_speech_seconds=settings.vad.min_speech_seconds,
+        remote_url=remote_cfg.url if remote_cfg.enabled else None,
+        remote_timeout=remote_cfg.timeout_seconds,
     )
 
 
@@ -340,11 +405,11 @@ def chat_loop() -> None:
 
 @app.command("run")
 def run() -> None:
-    """Start CoreMind in full voice assistant mode (record → transcribe → LLM → speak)."""
-    from coremind import AudioInputError, BrainError, STTError
+    """Start CoreMind in full voice assistant mode (wake word + VAD + TTS)."""
+    from coremind import AudioInputError, BrainError, STTError, WakeWordError
 
     settings = _get_settings()
-    loop = _build_voice_loop(settings)
+    loop = _build_voice_loop(settings, enable_wake_word=True, enable_vad=True)
 
     console.print(
         f"[bold green]{settings.app.name} ready.[/bold green] "
@@ -354,21 +419,12 @@ def run() -> None:
     turn = 0
     while True:
         turn += 1
-        console.print(
-            f"[dim]Turn {turn} —[/dim] "
-            f"[bold]Press Enter to speak ({settings.audio.record_seconds}s)...[/bold]",
-            end="",
-        )
+        console.print(f"[dim]--- Turn {turn} ---[/dim]")
         try:
-            input()
+            transcript, response = loop.run_once()
         except (KeyboardInterrupt, EOFError):
             console.print("\n[yellow]Goodbye.[/yellow]")
             break
-
-        console.print("[dim]Recording...[/dim]")
-
-        try:
-            transcript, response = loop.run_once()
         except AudioInputError as e:
             console.print(f"[red]Recording failed:[/red] {e}")
             continue
@@ -378,16 +434,51 @@ def run() -> None:
         except BrainError as e:
             console.print(f"[red]LLM error:[/red] {e}")
             continue
-        except (KeyboardInterrupt, EOFError):
-            console.print("\n[yellow]Goodbye.[/yellow]")
-            break
+        except WakeWordError as e:
+            console.print(f"[red]Wake word error:[/red] {e}")
+            continue
 
         if not transcript.strip():
-            console.print("[yellow]No speech detected. Try again.[/yellow]")
+            console.print("[yellow]No speech detected.[/yellow]")
             continue
 
         console.print(f"\n[bold]You:[/bold] {transcript}")
         console.print(f"\n[bold cyan]{settings.app.name}:[/bold cyan] {response}\n")
+
+
+# ---------------------------------------------------------------------------
+# Server command (run on Mac Mini)
+# ---------------------------------------------------------------------------
+
+@app.command("server")
+def server_cmd(
+    host: str = typer.Option("0.0.0.0", "--host", "-H", help="Bind address."),
+    port: int = typer.Option(8765, "--port", "-p", help="Port to listen on."),
+) -> None:
+    """Start the CoreMind HTTP server (run this on Mac Mini, not Pi)."""
+    try:
+        import uvicorn
+    except ImportError:
+        console.print("[red]uvicorn not installed.[/red] Run: pip install 'coremind[server]'")
+        raise typer.Exit(code=1)
+
+    try:
+        from coremind.server.app import app as _server_app, configure as _srv_configure
+        if _server_app is None:
+            raise ImportError("fastapi not available")
+    except ImportError:
+        console.print("[red]fastapi not installed.[/red] Run: pip install 'coremind[server]'")
+        raise typer.Exit(code=1)
+
+    _srv_configure(config_path=config)
+    console.print(
+        f"[bold green]CoreMind Hub starting[/bold green] — "
+        f"listening on {host}:{port}\n"
+        f"  Dashboard: http://localhost:{port}\n"
+        "  Node config: set remote_brain.enabled: true and "
+        f"remote_brain.url: http://<this-host>:{port}"
+    )
+    uvicorn.run(_server_app, host=host, port=port)
 
 
 if __name__ == "__main__":

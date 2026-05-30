@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 from coremind.vad.base import VoiceActivityDetector
 
 
@@ -8,4 +10,9 @@ class SimpleEnergyVAD(VoiceActivityDetector):
         self.threshold = threshold
 
     def is_speech(self, audio_chunk: bytes) -> bool:
-        raise NotImplementedError
+        """Return True if the RMS energy of int16 PCM bytes exceeds the threshold."""
+        if not audio_chunk:
+            return False
+        pcm = np.frombuffer(audio_chunk, dtype=np.int16).astype(np.float32) / 32768.0
+        rms = float(np.sqrt(np.mean(pcm ** 2)))
+        return rms > self.threshold
