@@ -105,7 +105,7 @@ def test_env_var_overrides_yaml(tmp_path, monkeypatch):
     assert settings.ollama.base_url == "http://env-value:11434"
 
 
-def test_env_var_overrides_defaults(monkeypatch):
+def test_env_var_overrides_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("COREMIND_AUDIO__SAMPLE_RATE", "44100")
-    settings = load_settings("nonexistent.yaml")
+    settings = load_settings(str(tmp_path / "nonexistent.yaml"))
     assert settings.audio.sample_rate == 44100
