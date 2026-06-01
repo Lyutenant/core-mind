@@ -22,6 +22,7 @@ app.add_typer(audio_app, name="audio")
 app.add_typer(chat_app, name="chat")
 
 _settings = None
+_config_path: str = "config.yaml"
 
 
 def _get_settings():
@@ -45,7 +46,8 @@ def main(
     config: str = typer.Option("config.yaml", "--config", "-c", help="Path to config file."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable DEBUG logging."),
 ) -> None:
-    global _settings
+    global _settings, _config_path
+    _config_path = config
     _settings = load_settings(config)
     level = "DEBUG" if verbose else _settings.app.log_level
     _setup_logging(level)
@@ -486,7 +488,7 @@ def server_cmd(
         console.print("[red]fastapi not installed.[/red] Run: pip install 'coremind[server]'")
         raise typer.Exit(code=1)
 
-    _srv_configure(config_path=config)
+    _srv_configure(config_path=_config_path)
     console.print(
         f"[bold green]CoreMind Hub starting[/bold green] — "
         f"listening on {host}:{port}\n"
@@ -521,7 +523,7 @@ def setup_cmd(
         console.print("[red]fastapi not installed.[/red] Run: pip install 'coremind[server]'")
         raise typer.Exit(code=1)
 
-    _srv_configure(config_path=config)
+    _srv_configure(config_path=_config_path)
     mode = _get_settings().mode
     mode_label = {"hub": "Hub", "node": "Node", "standalone": "Standalone"}.get(mode, mode)
     console.print(
