@@ -1,0 +1,94 @@
+# CoreMind Node — Raspberry Pi configuration
+# Copy this file to config.yaml on the Pi, or run `coremind setup` to configure via browser.
+#
+#   cp config.node.example.yaml config.yaml
+
+mode: node   # this device records audio and sends it to the Hub
+
+app:
+  name: Jarvis   # must match the Hub's name exactly
+  log_level: INFO
+
+runtime:
+  mode: push_to_talk
+  require_confirmation_for_actions: true
+
+audio:
+  # Run `coremind audio list-devices` to find device indexes.
+  # Set to the Index number shown in that table, or leave null for the system default.
+  # Example — USB mic at index 0, USB speaker at index 1:
+  #   input_device: 0
+  #   output_device: 1
+  input_device: null
+  output_device: null
+  # Use the sample rate your microphone reports in list-devices (e.g. 44100).
+  # If the device doesn't natively support 16000 Hz, PortAudio will resample.
+  sample_rate: 16000
+  channels: 1
+  record_seconds: 6   # fallback duration when VAD is disabled
+
+remote_brain:
+  # The Node sends audio to the Hub (Mac Mini) for STT + LLM + TTS.
+  # Find the Hub's Tailscale IP with: tailscale ip -4
+  enabled: true
+  url: http://100.x.x.x:8765   # replace with your Mac Mini's Tailscale IP
+  timeout_seconds: 90.0         # increase if the LLM takes longer than 90s
+
+wake_word:
+  # Say the wake phrase to start a turn instead of pressing Enter.
+  # Install: pip install openwakeword onnxruntime
+  # Download models: python -c "import openwakeword; openwakeword.utils.download_models()"
+  enabled: true
+  # provider: openwakeword (always-on listening) or dummy (press Enter)
+  provider: openwakeword
+  # Built-in phrases: hey_jarvis_v0.1, hey_mycroft_v0.1, alexa_v0.1
+  model: hey_jarvis_v0.1
+  # Confidence threshold (0.0–1.0). Higher = fewer false positives, but may miss triggers.
+  threshold: 0.5
+  # Use onnx on Pi — tflite is incompatible with NumPy 2.x on Raspberry Pi OS.
+  inference_framework: onnx
+
+vad:
+  # Stop recording automatically when you stop speaking.
+  enabled: true
+  # RMS energy threshold (0.0–1.0). Raise if background noise triggers recording.
+  energy_threshold: 0.01
+  # Stop recording after this many seconds of silence.
+  silence_seconds: 1.2
+  # Hard cap on recording length (seconds).
+  max_record_seconds: 20.0
+  # Ignore utterances shorter than this — filters accidental wake-word triggers.
+  min_speech_seconds: 0.3
+
+# --- Settings below are not used by the Node in remote-brain mode ---
+#     They are kept here so the file is valid if you ever disable remote_brain
+#     and run everything locally on the Pi.
+
+stt:
+  provider: whisper_local
+  model: tiny   # tiny or base recommended on Pi 5 CPU
+  language: en
+
+tts:
+  provider: espeak   # zero-config on Pi; or piper_local if you install piper-tts
+  model_path: null
+  voice: null
+
+brain:
+  provider: ollama
+  timeout_seconds: 90
+  allow_mock_fallback: false
+
+ollama:
+  base_url: http://100.x.x.x:11434   # Mac Mini Ollama (or localhost if running on Pi)
+  model: qwen3:8b
+  no_think: true
+  options: {}
+
+memory:
+  enabled: true
+  max_turns: 10
+
+openclaw:
+  base_url: null
+  agent: coremind

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import yaml
 from pydantic import BaseModel, field_validator
@@ -113,6 +113,12 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # Device role — determines which features are active on this machine.
+    #   hub:        Mac Mini: runs STT + LLM + TTS for Nodes
+    #   node:       Raspberry Pi: audio terminal, sends audio to Hub
+    #   standalone: all-in-one, no Hub needed
+    mode: Literal["hub", "node", "standalone"] = "hub"
+
     app: AppConfig = AppConfig()
     runtime: RuntimeConfig = RuntimeConfig()
     audio: AudioConfig = AudioConfig()
@@ -170,7 +176,24 @@ def load_settings(config_path: str = "config.yaml") -> Settings:
     yaml_data: dict = {}
 
     if not path.exists():
-        logger.warning("Config file %s not found, using defaults", config_path)
+        logger.info(
+            "No config file at %s — creating with defaults. "
+            "Run 'coremind setup' to configure via the web UI.",
+            config_path,
+        )
+        defaults = Settings()
+        try:
+            path.write_text(
+                yaml.dump(
+                    defaults.model_dump(),
+                    default_flow_style=False,
+                    allow_unicode=True,
+                    sort_keys=False,
+                )
+            )
+        except OSError as e:
+            logger.warning("Could not write default config to %s: %s", config_path, e)
+        return defaults
     else:
         try:
             raw = yaml.safe_load(path.read_text())

@@ -153,12 +153,21 @@ def _build_voice_loop(settings, *, enable_wake_word: bool = False, enable_vad: b
         channels=acfg.channels,
     )
 
-    # Remote mode: Pi is audio-only terminal; Mac Mini handles STT + LLM + TTS.
+    # Determine mode: "node" sends audio to Hub; "hub"/"standalone" processes locally.
+    # Legacy: also honour remote_brain.enabled for backward compatibility.
     remote_cfg = settings.remote_brain
-    if remote_cfg.enabled:
+    use_remote = (
+        settings.mode == "node"
+        or (settings.mode not in ("hub", "node", "standalone") and remote_cfg.enabled)
+        or (settings.mode == "hub" and remote_cfg.enabled)
+    )
+    if use_remote:
         if not remote_cfg.url:
-            raise ConfigError("remote_brain.enabled is true but remote_brain.url is not set.")
-        console.print(f"[dim]Remote brain: {remote_cfg.url}[/dim]")
+            raise ConfigError(
+                "mode is 'node' but remote_brain.url is not set. "
+                "Set the Hub URL in config.yaml or via 'coremind setup'."
+            )
+        console.print(f"[dim]Node mode — Hub: {remote_cfg.url}[/dim]")
         stt = None
         brain = None
         memory = None
@@ -298,7 +307,7 @@ def _build_voice_loop(settings, *, enable_wake_word: bool = False, enable_vad: b
         vad_silence_seconds=settings.vad.silence_seconds,
         vad_max_record_seconds=settings.vad.max_record_seconds,
         vad_min_speech_seconds=settings.vad.min_speech_seconds,
-        remote_url=remote_cfg.url if remote_cfg.enabled else None,
+        remote_url=remote_cfg.url if use_remote else None,
         remote_timeout=remote_cfg.timeout_seconds,
     )
 
@@ -409,6 +418,13 @@ def run() -> None:
     from coremind import AudioInputError, BrainError, STTError, WakeWordError
 
     settings = _get_settings()
+    if settings.mode == "hub":
+        console.print(
+            "[yellow]Warning:[/yellow] mode is 'hub' — this device is configured as a Hub.\n"
+            "  To start the Hub server: [bold]coremind server[/bold]\n"
+            "  To run as a standalone assistant: set [bold]mode: standalone[/bold] in config.yaml\n"
+            "  Continuing anyway…\n"
+        )
     loop = _build_voice_loop(settings, enable_wake_word=True, enable_vad=True)
 
     console.print(
@@ -477,6 +493,46 @@ def server_cmd(
         f"  Dashboard: http://localhost:{port}\n"
         "  Node config: set remote_brain.enabled: true and "
         f"remote_brain.url: http://<this-host>:{port}"
+    )
+    uvicorn.run(_server_app, host=host, port=port)
+
+
+@app.command("setup")
+def setup_cmd(
+    host: str = typer.Option("0.0.0.0", "--host", "-H", help="Bind address."),
+    port: int = typer.Option(8766, "--port", "-p", help="Port to listen on."),
+) -> None:
+    """Start a web UI to configure this device (Hub or Node). Runs on port 8766 by default.
+
+    Use this on any device to set up config.yaml via a browser — no manual file editing needed.
+    After saving, stop this server (Ctrl+C) and run 'coremind server' (Hub) or 'coremind run' (Node).
+    """
+    try:
+        import uvicorn
+    except ImportError:
+        console.print("[red]uvicorn not installed.[/red] Run: pip install 'coremind[server]'")
+        raise typer.Exit(code=1)
+
+    try:
+        from coremind.server.app import app as _server_app, configure as _srv_configure
+        if _server_app is None:
+            raise ImportError("fastapi not available")
+    except ImportError:
+        console.print("[red]fastapi not installed.[/red] Run: pip install 'coremind[server]'")
+        raise typer.Exit(code=1)
+
+    _srv_configure(config_path=config)
+    mode = _get_settings().mode
+    mode_label = {"hub": "Hub", "node": "Node", "standalone": "Standalone"}.get(mode, mode)
+    console.print(
+        f"[bold green]CoreMind Setup UI[/bold green] — "
+        f"current mode: [bold]{mode_label}[/bold]\n"
+        f"  Open [bold]http://localhost:{port}[/bold] in your browser\n"
+        "  Go to Settings → App → Mode to set this device's role\n"
+        "  Save, then Ctrl+C and run:\n"
+        "    Hub:        [bold]coremind server[/bold]\n"
+        "    Node:       [bold]coremind run[/bold]\n"
+        "    Standalone: [bold]coremind run[/bold]"
     )
     uvicorn.run(_server_app, host=host, port=port)
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CoreMind Hub</title>
+  <title>CoreMind</title>
   <style>
     :root {
       --bg:          #07101f;
@@ -139,6 +139,7 @@
       flex-shrink: 0;
       gap: 12px;
     }
+    .topbar-left { display: flex; align-items: center; gap: 10px; }
     .topbar-title { font-size: 14px; font-weight: 600; color: var(--text); }
     .topbar-right { display: flex; align-items: center; gap: 8px; }
 
@@ -154,8 +155,11 @@
       border: 1px solid var(--border);
       color: var(--text-muted);
     }
-    .pill.ok    { border-color: var(--success); color: var(--success); background: rgba(34,197,94,.08); }
-    .pill.error { border-color: var(--error);   color: var(--error);   background: rgba(239,68,68,.08); }
+    .pill.ok      { border-color: var(--success); color: var(--success); background: rgba(34,197,94,.08); }
+    .pill.error   { border-color: var(--error);   color: var(--error);   background: rgba(239,68,68,.08); }
+    .pill.hub     { border-color: var(--accent);  color: var(--accent);  background: var(--accent-soft); }
+    .pill.node    { border-color: var(--warning); color: var(--warning); background: rgba(245,158,11,.08); }
+    .pill.standalone { border-color: var(--success); color: var(--success); background: rgba(34,197,94,.08); }
 
     /* ── View switching ── */
     .view { display: none; flex: 1; overflow: hidden; }
@@ -432,6 +436,17 @@
     }
     .toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
 
+    .info-callout {
+      margin: 0;
+      padding: 11px 16px;
+      background: var(--accent-soft);
+      border-bottom: 1px solid rgba(61,142,240,.2);
+      font-size: 11.5px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+    .info-callout strong { color: var(--accent); }
+
     .save-row {
       display: flex;
       align-items: center;
@@ -479,7 +494,7 @@
         <div class="logo-icon">🧠</div>
         <div>
           <div class="logo-text">CoreMind</div>
-          <div class="logo-sub">Hub</div>
+          <div class="logo-sub" id="logo-sub">Hub</div>
         </div>
       </div>
     </div>
@@ -515,7 +530,10 @@
 
     <!-- Topbar -->
     <div class="topbar">
-      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-left">
+        <div class="topbar-title" id="topbar-title">Dashboard</div>
+        <span class="pill hub" id="pill-mode">Hub</span>
+      </div>
       <div class="topbar-right">
         <span class="pill" id="pill-status">Idle</span>
         <button class="btn" onclick="refreshHealth()">↻ Refresh</button>
@@ -571,30 +589,50 @@
     <section class="view" id="view-settings">
       <div class="settings-wrap">
         <div class="settings-header">
-          <h2>Hub Settings</h2>
+          <h2 id="settings-title">Hub Settings</h2>
         </div>
 
         <div class="tabs" id="settings-tabs">
-          <button class="tab-btn active" onclick="switchTab('app')">App</button>
-          <button class="tab-btn" onclick="switchTab('stt')">STT</button>
-          <button class="tab-btn" onclick="switchTab('tts')">TTS</button>
-          <button class="tab-btn" onclick="switchTab('ollama')">Ollama</button>
-          <button class="tab-btn" onclick="switchTab('memory')">Memory</button>
-          <button class="tab-btn" onclick="switchTab('vad')">VAD</button>
-          <button class="tab-btn" onclick="switchTab('wake_word')">Wake Word</button>
-          <button class="tab-btn" onclick="switchTab('audio')">Audio</button>
-          <button class="tab-btn" onclick="switchTab('remote_brain')">Remote Brain</button>
+          <button class="tab-btn active" data-tab="app"          onclick="switchTab('app')">App</button>
+          <button class="tab-btn"        data-tab="stt"          onclick="switchTab('stt')">STT</button>
+          <button class="tab-btn"        data-tab="tts"          onclick="switchTab('tts')">TTS</button>
+          <button class="tab-btn"        data-tab="ollama"       onclick="switchTab('ollama')">Ollama</button>
+          <button class="tab-btn"        data-tab="memory"       onclick="switchTab('memory')">Memory</button>
+          <button class="tab-btn"        data-tab="audio"        onclick="switchTab('audio')">Audio</button>
+          <button class="tab-btn"        data-tab="wake_word"    onclick="switchTab('wake_word')">Wake Word</button>
+          <button class="tab-btn"        data-tab="vad"          onclick="switchTab('vad')">VAD</button>
+          <button class="tab-btn"        data-tab="remote_brain" onclick="switchTab('remote_brain')">Hub Connection</button>
         </div>
 
         <!-- Tab: App -->
         <div class="tab-panel active" id="tab-app">
+          <!-- Device Role — always first -->
+          <div class="form-section">
+            <div class="form-section-title">Device Role</div>
+            <div class="form-grid single">
+              <div class="field">
+                <label>Mode</label>
+                <select id="mode" onchange="onModeChange(this.value)">
+                  <option value="hub">Hub — Mac Mini (STT + LLM + TTS, serves Nodes)</option>
+                  <option value="node">Node — Raspberry Pi (audio terminal, connects to Hub)</option>
+                  <option value="standalone">Standalone — all-in-one, no Hub needed</option>
+                </select>
+                <span class="hint">
+                  <strong>Hub</strong>: runs the AI pipeline; Nodes send audio here.
+                  <strong>Node</strong>: records audio and plays responses; offloads everything to the Hub.
+                  <strong>Standalone</strong>: runs the full pipeline locally on this device.
+                </span>
+              </div>
+            </div>
+          </div>
+
           <div class="form-section">
             <div class="form-section-title">Application</div>
             <div class="form-grid">
               <div class="field">
                 <label>Assistant Name</label>
                 <input type="text" id="app.name" placeholder="Jarvis">
-                <span class="hint">What CoreMind Node calls itself when speaking.</span>
+                <span class="hint">Used in responses and the system prompt. Must match on Hub and Node.</span>
               </div>
               <div class="field">
                 <label>Log Level</label>
@@ -607,7 +645,7 @@
           </div>
         </div>
 
-        <!-- Tab: STT -->
+        <!-- Tab: STT — Hub / Standalone -->
         <div class="tab-panel" id="tab-stt">
           <div class="form-section">
             <div class="form-section-title">Speech-to-Text</div>
@@ -639,7 +677,7 @@
           </div>
         </div>
 
-        <!-- Tab: TTS -->
+        <!-- Tab: TTS — Hub / Standalone -->
         <div class="tab-panel" id="tab-tts">
           <div class="form-section">
             <div class="form-section-title">Text-to-Speech</div>
@@ -666,7 +704,7 @@
           </div>
         </div>
 
-        <!-- Tab: Ollama -->
+        <!-- Tab: Ollama — Hub / Standalone -->
         <div class="tab-panel" id="tab-ollama">
           <div class="form-section">
             <div class="form-section-title">Ollama Connection</div>
@@ -727,7 +765,7 @@
           </div>
         </div>
 
-        <!-- Tab: Memory -->
+        <!-- Tab: Memory — Hub / Standalone -->
         <div class="tab-panel" id="tab-memory">
           <div class="form-section">
             <div class="form-section-title">Session Memory</div>
@@ -752,45 +790,39 @@
           </div>
         </div>
 
-        <!-- Tab: VAD -->
-        <div class="tab-panel" id="tab-vad">
+        <!-- Tab: Audio — Node / Standalone -->
+        <div class="tab-panel" id="tab-audio">
           <div class="form-section">
-            <div class="form-section-title">Voice Activity Detection</div>
+            <div class="form-section-title">Audio Devices</div>
             <div class="form-grid">
               <div class="field">
-                <label class="toggle-row">
-                  <span class="toggle-label">Enabled</span>
-                  <label class="toggle">
-                    <input type="checkbox" id="vad.enabled">
-                    <span class="toggle-track"></span>
-                    <span class="toggle-thumb"></span>
-                  </label>
-                </label>
-                <span class="hint">Auto-stop recording when speech ends. Used by Node.</span>
+                <label>Input Device Index</label>
+                <input type="number" id="audio.input_device" min="0" step="1" placeholder="null (system default)">
+                <span class="hint">Run 'coremind audio list-devices' on this device to find the index.</span>
               </div>
               <div class="field">
-                <label>Energy Threshold (0.0–1.0)</label>
-                <input type="number" id="vad.energy_threshold" min="0" max="1" step="0.001">
-                <span class="hint">Lower = more sensitive. Raise if noise triggers false starts.</span>
+                <label>Output Device Index</label>
+                <input type="number" id="audio.output_device" min="0" step="1" placeholder="null (system default)">
               </div>
               <div class="field">
-                <label>Silence to Stop (s)</label>
-                <input type="number" id="vad.silence_seconds" min="0.3" max="5" step="0.1">
+                <label>Sample Rate (Hz)</label>
+                <input type="number" id="audio.sample_rate" min="8000" max="192000" step="100">
+                <span class="hint">Match your mic's native rate (e.g. 44100) to avoid resampling.</span>
               </div>
               <div class="field">
-                <label>Max Record Duration (s)</label>
-                <input type="number" id="vad.max_record_seconds" min="5" max="120" step="1">
+                <label>Channels</label>
+                <input type="number" id="audio.channels" min="1" max="8" step="1">
               </div>
               <div class="field">
-                <label>Min Speech Length (s)</label>
-                <input type="number" id="vad.min_speech_seconds" min="0.1" max="2" step="0.1">
-                <span class="hint">Ignore utterances shorter than this — filters accidental triggers.</span>
+                <label>Fixed Record Duration (s)</label>
+                <input type="number" id="audio.record_seconds" min="1" max="30" step="1">
+                <span class="hint">Used when VAD is disabled (push-to-talk mode).</span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Tab: Wake Word -->
+        <!-- Tab: Wake Word — Node / Standalone -->
         <div class="tab-panel" id="tab-wake_word">
           <div class="form-section">
             <div class="form-section-title">Wake Word Detection</div>
@@ -804,7 +836,7 @@
                     <span class="toggle-thumb"></span>
                   </label>
                 </label>
-                <span class="hint">Requires openwakeword on the Node (Pi).</span>
+                <span class="hint">When disabled, press Enter to start a turn instead.</span>
               </div>
               <div class="field">
                 <label>Provider</label>
@@ -834,63 +866,69 @@
           </div>
         </div>
 
-        <!-- Tab: Audio -->
-        <div class="tab-panel" id="tab-audio">
+        <!-- Tab: VAD — Node / Standalone -->
+        <div class="tab-panel" id="tab-vad">
           <div class="form-section">
-            <div class="form-section-title">Audio Devices</div>
-            <div class="form-grid">
-              <div class="field">
-                <label>Input Device Index</label>
-                <input type="number" id="audio.input_device" min="0" step="1" placeholder="null (system default)">
-                <span class="hint">Run 'coremind audio list-devices' on the Node to find the index.</span>
-              </div>
-              <div class="field">
-                <label>Output Device Index</label>
-                <input type="number" id="audio.output_device" min="0" step="1" placeholder="null (system default)">
-              </div>
-              <div class="field">
-                <label>Sample Rate (Hz)</label>
-                <input type="number" id="audio.sample_rate" min="8000" max="192000" step="100">
-                <span class="hint">Match your mic's native rate (e.g. 44100) to avoid resampling.</span>
-              </div>
-              <div class="field">
-                <label>Channels</label>
-                <input type="number" id="audio.channels" min="1" max="8" step="1">
-              </div>
-              <div class="field">
-                <label>Fixed Record Duration (s)</label>
-                <input type="number" id="audio.record_seconds" min="1" max="30" step="1">
-                <span class="hint">Used when VAD is disabled (push-to-talk mode).</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tab: Remote Brain -->
-        <div class="tab-panel" id="tab-remote_brain">
-          <div class="form-section">
-            <div class="form-section-title">Remote Brain (Node → Hub)</div>
+            <div class="form-section-title">Voice Activity Detection</div>
             <div class="form-grid">
               <div class="field">
                 <label class="toggle-row">
                   <span class="toggle-label">Enabled</span>
                   <label class="toggle">
-                    <input type="checkbox" id="remote_brain.enabled">
+                    <input type="checkbox" id="vad.enabled">
                     <span class="toggle-track"></span>
                     <span class="toggle-thumb"></span>
                   </label>
                 </label>
-                <span class="hint">When enabled on the Node (Pi), all audio is sent to the Hub for processing.</span>
+                <span class="hint">Auto-stop recording when speech ends.</span>
               </div>
+              <div class="field">
+                <label>Energy Threshold (0.0–1.0)</label>
+                <input type="number" id="vad.energy_threshold" min="0" max="1" step="0.001">
+                <span class="hint">Lower = more sensitive. Raise if noise triggers false starts.</span>
+              </div>
+              <div class="field">
+                <label>Silence to Stop (s)</label>
+                <input type="number" id="vad.silence_seconds" min="0.3" max="5" step="0.1">
+              </div>
+              <div class="field">
+                <label>Max Record Duration (s)</label>
+                <input type="number" id="vad.max_record_seconds" min="5" max="120" step="1">
+              </div>
+              <div class="field">
+                <label>Min Speech Length (s)</label>
+                <input type="number" id="vad.min_speech_seconds" min="0.1" max="2" step="0.1">
+                <span class="hint">Ignore utterances shorter than this — filters accidental triggers.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Hub Connection — Node only -->
+        <div class="tab-panel" id="tab-remote_brain">
+          <div class="form-section">
+            <div class="info-callout">
+              This device is a <strong>Node</strong>. Audio is recorded here and sent to the
+              <strong>Hub</strong> (Mac Mini) for STT → LLM → TTS processing. The Hub returns
+              synthesized audio which plays on this device. Start the Hub with:
+              <code style="font-family:var(--mono);font-size:10.5px">coremind server</code>
+            </div>
+            <div class="form-section-title">Hub Connection</div>
+            <div class="form-grid single">
               <div class="field">
                 <label>Hub URL</label>
                 <input type="url" id="remote_brain.url" placeholder="http://100.x.x.x:8765">
-                <span class="hint">Tailscale or LAN IP of the Mac Mini running 'coremind server'.</span>
+                <span class="hint">
+                  Tailscale or LAN address of the Mac Mini running 'coremind server'.
+                  Find the Mac Mini's Tailscale IP with: <code style="font-family:var(--mono)">tailscale ip -4</code>
+                </span>
               </div>
+            </div>
+            <div class="form-grid">
               <div class="field">
                 <label>Timeout (s)</label>
                 <input type="number" id="remote_brain.timeout_seconds" min="10" max="300" step="5">
-                <span class="hint">Allow extra time for large LLM models to respond.</span>
+                <span class="hint">Allow extra time for large LLM models (35B+ may need 90s+).</span>
               </div>
             </div>
           </div>
@@ -912,10 +950,24 @@
 
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
-let currentView = 'dashboard';
-let currentTab  = 'app';
-let es = null;          // EventSource
-let pendingTurn = null; // in-progress turn (transcript received, waiting for response)
+let currentView  = 'dashboard';
+let currentTab   = 'app';
+let currentMode  = 'hub';
+let assistantName = 'Assistant';
+let es = null;
+
+// ── Tab mode visibility ─────────────────────────────────────────────────────
+const TAB_MODES = {
+  app:          ['hub', 'node', 'standalone'],
+  stt:          ['hub', 'standalone'],
+  tts:          ['hub', 'standalone'],
+  ollama:       ['hub', 'standalone'],
+  memory:       ['hub', 'standalone'],
+  audio:        ['node', 'standalone'],
+  wake_word:    ['node', 'standalone'],
+  vad:          ['node', 'standalone'],
+  remote_brain: ['node'],
+};
 
 // ── View switching ──────────────────────────────────────────────────────────
 function switchView(name) {
@@ -923,8 +975,9 @@ function switchView(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   document.getElementById('nav-' + name).classList.add('active');
+  const modeLabel = { hub: 'Hub', node: 'Node', standalone: 'Standalone' }[currentMode] || '';
   document.getElementById('topbar-title').textContent =
-    name === 'dashboard' ? 'Dashboard' : 'Hub Settings';
+    name === 'dashboard' ? 'Dashboard' : (modeLabel + ' Settings');
   currentView = name;
   if (name === 'settings') loadConfig();
 }
@@ -934,8 +987,40 @@ function switchTab(name) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  event.target.classList.add('active');
+  const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+  if (btn) btn.classList.add('active');
   currentTab = name;
+}
+
+// ── Mode change ─────────────────────────────────────────────────────────────
+function onModeChange(mode) {
+  currentMode = mode;
+
+  // Show/hide tab buttons based on which modes they belong to
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    const tab = btn.dataset.tab;
+    const visible = (TAB_MODES[tab] || []).includes(mode);
+    btn.style.display = visible ? '' : 'none';
+  });
+
+  // If current tab is now hidden, fall back to App tab
+  if (!(TAB_MODES[currentTab] || []).includes(mode)) {
+    switchTab('app');
+  }
+
+  // Update labels
+  const modeLabels = { hub: 'Hub', node: 'Node', standalone: 'Standalone' };
+  const label = modeLabels[mode] || mode;
+  document.getElementById('logo-sub').textContent = label;
+  document.getElementById('settings-title').textContent = label + ' Settings';
+  if (currentView === 'settings') {
+    document.getElementById('topbar-title').textContent = label + ' Settings';
+  }
+
+  // Update mode pill
+  const pill = document.getElementById('pill-mode');
+  pill.textContent = label;
+  pill.className = 'pill ' + mode;
 }
 
 // ── Toast ───────────────────────────────────────────────────────────────────
@@ -951,15 +1036,20 @@ function toast(msg, type = '') {
 function setStatus(text, active = false) {
   document.getElementById('status-text').textContent = text;
   document.getElementById('spinner').classList.toggle('active', active);
-  const pill = document.getElementById('pill-status');
-  pill.textContent = text;
-  pill.className = 'pill' + (active ? '' : '');
+  document.getElementById('pill-status').textContent = text;
 }
 
 // ── Health refresh ──────────────────────────────────────────────────────────
 async function refreshHealth() {
   try {
     const h = await fetch('/api/health').then(r => r.json());
+    assistantName = h.name || 'Assistant';
+    // Update mode from server (in case it changed)
+    if (h.mode && h.mode !== currentMode) {
+      onModeChange(h.mode);
+      const modeEl = document.getElementById('mode');
+      if (modeEl) modeEl.value = h.mode;
+    }
     // Sidebar dots
     setDot('dot-ollama', h.ollama_reachable ? 'ok' : 'error');
     setDot('dot-stt', h.stt_loaded ? 'ok' : 'warn');
@@ -982,7 +1072,7 @@ async function refreshHealth() {
 
 function setDot(id, cls) {
   const el = document.getElementById(id);
-  el.className = 'dot ' + cls;
+  if (el) el.className = 'dot ' + cls;
 }
 function setText(id, val) {
   const el = document.getElementById(id);
@@ -1018,8 +1108,8 @@ function addTurnCard(turn) {
         <div class="msg-text">${esc(turn.transcript)}</div>
       </div>
       <div class="msg-row">
-        <div class="msg-role ai" id="role-${turn.turn}">Jarvis</div>
-        <div class="msg-text" id="resp-${turn.turn}">${esc(turn.response)}</div>
+        <div class="msg-role ai">${esc(assistantName)}</div>
+        <div class="msg-text">${esc(turn.response)}</div>
       </div>
     </div>`;
   log.appendChild(card);
@@ -1044,7 +1134,7 @@ function addPendingCard(transcript) {
         <div class="msg-text">${esc(transcript)}</div>
       </div>
       <div class="msg-row">
-        <div class="msg-role ai">Jarvis</div>
+        <div class="msg-role ai">${esc(assistantName)}</div>
         <div class="msg-text" style="color:var(--text-dim)">Thinking…</div>
       </div>
     </div>`;
@@ -1079,14 +1169,12 @@ function handleEvent(ev) {
   switch (ev.type) {
     case 'ping': break;
     case 'status':
-      const active = ev.text !== 'Idle';
-      setStatus(ev.text, active);
+      setStatus(ev.text, ev.text !== 'Idle');
       break;
     case 'transcript':
       addPendingCard(ev.text);
       break;
     case 'turn':
-      // Remove pending card and add final card
       const pending = document.getElementById('turn-pending');
       if (pending) pending.remove();
       addTurnCard(ev);
@@ -1113,8 +1201,14 @@ async function loadConfig() {
 }
 
 function applyConfig(cfg) {
+  // Apply mode first so tab visibility is correct before populating fields
+  const mode = cfg.mode || 'hub';
+  const modeEl = document.getElementById('mode');
+  if (modeEl) modeEl.value = mode;
+
   const flat = flatten(cfg);
   for (const [key, val] of Object.entries(flat)) {
+    if (key === 'mode') continue;  // handled above
     const el = document.getElementById(key);
     if (!el) continue;
     if (el.type === 'checkbox') {
@@ -1127,6 +1221,8 @@ function applyConfig(cfg) {
       el.value = val;
     }
   }
+
+  onModeChange(mode);
 }
 
 async function saveConfig() {
@@ -1186,12 +1282,16 @@ function buildConfig() {
     return num;
   };
   let options = {};
-  const optVal = document.getElementById('ollama.options').value.trim();
-  if (optVal) {
-    try { options = JSON.parse(optVal); }
+  const optVal = (document.getElementById('ollama.options') || {}).value || '';
+  if (optVal.trim()) {
+    try { options = JSON.parse(optVal.trim()); }
     catch (e) { throw new Error('ollama.options: invalid JSON'); }
   }
+
+  const mode = g('mode') || 'hub';
+
   return {
+    mode,
     app:    { name: g('app.name'), log_level: g('app.log_level') },
     runtime: { mode: 'push_to_talk', require_confirmation_for_actions: true },
     audio: {
@@ -1201,8 +1301,16 @@ function buildConfig() {
       channels:       n('audio.channels'),
       record_seconds: n('audio.record_seconds'),
     },
-    stt: { provider: g('stt.provider'), model: g('stt.model').split(' ')[0], language: g('stt.language') },
-    tts: { provider: g('tts.provider'), model_path: g('tts.model_path', true), voice: g('tts.voice', true) },
+    stt: {
+      provider: g('stt.provider'),
+      model: (g('stt.model') || 'base').split(' ')[0],
+      language: g('stt.language'),
+    },
+    tts: {
+      provider: g('tts.provider'),
+      model_path: g('tts.model_path', true),
+      voice: g('tts.voice', true),
+    },
     brain: {
       provider: g('brain.provider'),
       timeout_seconds: n('brain.timeout_seconds'),
@@ -1215,24 +1323,24 @@ function buildConfig() {
       options,
     },
     openclaw: { base_url: null, agent: 'coremind' },
-    memory:  { enabled: g('memory.enabled'), max_turns: n('memory.max_turns') },
+    memory:   { enabled: g('memory.enabled'), max_turns: n('memory.max_turns') },
     vad: {
-      enabled: g('vad.enabled'),
-      energy_threshold: n('vad.energy_threshold'),
-      silence_seconds: n('vad.silence_seconds'),
+      enabled:            g('vad.enabled'),
+      energy_threshold:   n('vad.energy_threshold'),
+      silence_seconds:    n('vad.silence_seconds'),
       max_record_seconds: n('vad.max_record_seconds'),
       min_speech_seconds: n('vad.min_speech_seconds'),
     },
     wake_word: {
-      enabled: g('wake_word.enabled'),
-      provider: g('wake_word.provider'),
-      model: g('wake_word.model'),
-      threshold: n('wake_word.threshold'),
-      inference_framework: g('wake_word.inference_framework').split(' ')[0],
+      enabled:             g('wake_word.enabled'),
+      provider:            g('wake_word.provider'),
+      model:               g('wake_word.model'),
+      threshold:           n('wake_word.threshold'),
+      inference_framework: (g('wake_word.inference_framework') || 'onnx').split(' ')[0],
     },
     remote_brain: {
-      enabled: g('remote_brain.enabled'),
-      url: g('remote_brain.url'),
+      enabled:         mode === 'node',  // auto-derived from mode
+      url:             g('remote_brain.url'),
       timeout_seconds: n('remote_brain.timeout_seconds'),
     },
   };
@@ -1253,6 +1361,7 @@ function flatten(obj, prefix = '', out = {}) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  onModeChange('hub');   // set initial tab visibility before health loads
   connectSSE();
   refreshHealth();
   loadConversation();

@@ -169,6 +169,7 @@ try:
             pass
         return {
             "status": "ok",
+            "mode": s.mode,
             "name": s.app.name,
             "model": s.ollama.model,
             "ollama_url": s.ollama.base_url,

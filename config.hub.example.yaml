@@ -1,0 +1,86 @@
+# CoreMind Hub — Mac Mini configuration
+# Copy this file to config.yaml on the Mac Mini, or run `coremind setup` to configure via browser.
+#
+#   cp config.hub.example.yaml config.yaml
+
+mode: hub   # this device processes STT + LLM + TTS for Nodes
+
+app:
+  name: Jarvis        # your assistant's name — must match the Node config
+  log_level: INFO
+
+runtime:
+  mode: push_to_talk
+  require_confirmation_for_actions: true
+
+stt:
+  # provider: whisper_local (recommended) or mock (silent, for testing)
+  provider: whisper_local
+  # Model size — speed vs accuracy on Mac CPU:
+  #   tiny  — fastest (~0.5s/clip),  ~75 MB download
+  #   base  — good balance (~1s/clip), ~140 MB download  ← recommended
+  #   small — more accurate (~2s/clip), ~460 MB download
+  model: base
+  language: en
+
+tts:
+  # provider options:
+  #   piper_local — high-quality neural voice; requires model_path below
+  #   espeak      — robotic but zero-config; install: brew install espeak-ng
+  #   mock        — silent, for testing only
+  provider: piper_local
+  # Path to a downloaded Piper .onnx voice model file.
+  # Both the .onnx and .onnx.json files must be in the same directory.
+  # Download voices from https://github.com/rhasspy/piper-voices
+  # Example: en_US-amy-medium.onnx, en_US-ryan-high.onnx, en_GB-alan-medium.onnx
+  model_path: /Users/yourname/piper-voices/en_US-amy-medium.onnx
+  voice: null   # espeak only — voice variant e.g. "en", "en+f3", "en-us"
+
+brain:
+  provider: ollama
+  timeout_seconds: 90
+  allow_mock_fallback: false
+
+ollama:
+  base_url: http://localhost:11434   # Ollama runs locally on the Mac Mini
+  model: qwen3:8b                    # pull first: ollama pull qwen3:8b
+  no_think: true                     # skip chain-of-thought — faster voice responses
+  options: {}                        # optional Ollama params: num_predict: 200, temperature: 0.7
+
+memory:
+  enabled: true
+  max_turns: 10
+
+remote_brain:
+  enabled: false   # Hub does not forward to another Hub
+  url: ""
+  timeout_seconds: 90.0
+
+# --- Settings below are not used by the Hub in remote-brain mode ---
+#     They are kept here so the file is valid if you ever run the Hub
+#     as a standalone all-in-one assistant.
+
+audio:
+  input_device: null
+  output_device: null
+  sample_rate: 16000
+  channels: 1
+  record_seconds: 6
+
+vad:
+  enabled: false
+  energy_threshold: 0.01
+  silence_seconds: 1.2
+  max_record_seconds: 20.0
+  min_speech_seconds: 0.3
+
+wake_word:
+  enabled: false
+  provider: dummy
+  model: hey_jarvis_v0.1
+  threshold: 0.5
+  inference_framework: onnx
+
+openclaw:
+  base_url: null
+  agent: coremind

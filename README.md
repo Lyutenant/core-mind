@@ -97,7 +97,7 @@ brew install espeak-ng   # already done in 1.1 if you ran it
 ### 1.5 Create the Hub config
 
 ```bash
-cp config.example.yaml config.yaml
+cp config.hub.example.yaml config.yaml
 ```
 
 Edit `config.yaml`. Key Hub settings:
@@ -217,7 +217,7 @@ python -c "import openwakeword; openwakeword.utils.download_models()"
 ### 2.5 Create the Node config
 
 ```bash
-cp config.example.yaml config.yaml
+cp config.node.example.yaml config.yaml
 ```
 
 Edit `config.yaml`. Key Node settings:
