@@ -205,14 +205,18 @@ pip install -e ".[dev]"
 
 **Optional — wake word detection (required for always-on "Hey Jarvis" mode):**
 ```bash
+# Step 1: install onnxruntime (the inference backend we use on Pi)
 pip install 'coremind[wake_word]'
-# also install onnxruntime for Pi-compatible inference:
-pip install onnxruntime
-# download the built-in wake word models:
+
+# Step 2: install openwakeword WITHOUT its dependencies
+# (its tflite-runtime dependency has no Pi ARM64 wheel for Python 3.11+)
+pip install openwakeword --no-deps
+
+# Step 3: download the built-in wake word models
 python -c "import openwakeword; openwakeword.utils.download_models()"
 ```
 
-> **Note:** Use `inference_framework: onnx` in config (not tflite). The tflite runtime is incompatible with NumPy 2.x which ships with Raspberry Pi OS.
+> **Note:** Always use `inference_framework: onnx` in config. The `tflite` backend requires `tflite-runtime` which is incompatible with NumPy 2.x on Raspberry Pi OS.
 
 ### 2.5 Create the Node config
 

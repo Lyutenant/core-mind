@@ -32,7 +32,10 @@ tts = [
     "openai>=1.0",
 ]
 wake_word = [
-    "openwakeword>=0.6",
+    # openwakeword is NOT listed here because it pulls in tflite-runtime on Linux,
+    # which has no pre-built wheel for Pi ARM64 + Python 3.11.
+    # Install it manually with --no-deps (see README).
+    "onnxruntime>=1.16",
 ]
 server = [
     "fastapi>=0.111",

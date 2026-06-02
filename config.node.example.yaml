@@ -36,7 +36,7 @@ remote_brain:
 
 wake_word:
   # Say the wake phrase to start a turn instead of pressing Enter.
-  # Install: pip install openwakeword onnxruntime
+  # Install: pip install 'coremind[wake_word]' && pip install openwakeword --no-deps
   # Download models: python -c "import openwakeword; openwakeword.utils.download_models()"
   enabled: true
   # provider: openwakeword (always-on listening) or dummy (press Enter)
