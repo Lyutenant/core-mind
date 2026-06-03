@@ -23,6 +23,7 @@ _settings = None
 _stt = None
 _tts = None
 _brain = None
+_dispatcher = None
 _sessions: dict = {}
 _conversation_log: list[dict] = []
 _event_listeners: list[asyncio.Queue] = []
@@ -99,12 +100,25 @@ def _get_tts():
     return _tts
 
 
+def _get_dispatcher():
+    global _dispatcher
+    if _dispatcher is None:
+        from coremind.tools.dispatcher import ToolDispatcher
+        s = _get_settings()
+        _dispatcher = ToolDispatcher()
+        if s.tools.enabled and s.tools.built_in:
+            _dispatcher.register_built_ins(s.tools.built_in)
+            logger.info("Tools loaded: %s", s.tools.built_in)
+    return _dispatcher
+
+
 def _reset_singletons() -> None:
-    global _settings, _stt, _tts, _brain
+    global _settings, _stt, _tts, _brain, _dispatcher
     _settings = None
     _stt = None
     _tts = None
     _brain = None
+    _dispatcher = None
 
 
 def _get_session(session_id: str):
@@ -131,6 +145,56 @@ def _broadcast(event: dict) -> None:
             _event_listeners.remove(q)
         except ValueError:
             pass
+
+
+# ---------------------------------------------------------------------------
+# LLM + tool loop
+# ---------------------------------------------------------------------------
+
+async def _run_llm_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:
+    """Call the LLM, execute any tool calls it requests, return (response_text, tool_calls_used)."""
+    import asyncio
+
+    brain = _get_brain()
+    dispatcher = _get_dispatcher()
+    tool_defs = dispatcher.get_tool_definitions()
+
+    if not tool_defs:
+        return brain.ask(messages), []
+
+    conv = list(messages)
+    _MAX_ROUNDS = 5
+    result = await asyncio.to_thread(brain.ask_with_tools, conv, tool_defs)
+    tool_calls_used: list[dict] = []
+
+    for _ in range(_MAX_ROUNDS):
+        if not result.tool_calls:
+            break
+
+        # Append the assistant turn (with tool_calls) before adding tool results.
+        conv.append({
+            "role": "assistant",
+            "content": result.content,
+            "tool_calls": result.tool_calls,
+        })
+
+        for call in result.tool_calls:
+            fn = call.get("function", {})
+            fn_name = fn.get("name", "")
+            fn_args = fn.get("arguments") or {}
+            _broadcast({"type": "status", "text": f"Running tool: {fn_name}…"})
+            tool_result = await asyncio.to_thread(dispatcher.execute, fn_name, fn_args)
+            _broadcast({"type": "tool_call", "name": fn_name, "args": fn_args, "result": tool_result})
+            logger.info("Tool %r → %r", fn_name, tool_result[:120] if tool_result else "")
+            conv.append({"role": "tool", "tool_name": fn_name, "content": tool_result})
+            tool_calls_used.append({"name": fn_name, "args": fn_args, "result": tool_result})
+
+        _broadcast({"type": "status", "text": "Sending to LLM…"})
+        result = await asyncio.to_thread(brain.ask_with_tools, conv, tool_defs)
+    else:
+        logger.warning("Tool loop hit max rounds (%d) — returning last content", _MAX_ROUNDS)
+
+    return result.content, tool_calls_used
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +364,7 @@ try:
         )
 
         try:
-            response_text = _get_brain().ask(messages)
+            response_text, tool_calls_used = await _run_llm_with_tools(messages)
         except Exception as e:
             logger.error("LLM failed: %s", e)
             _broadcast({"type": "status", "text": f"LLM error: {e}"})
@@ -340,6 +404,7 @@ try:
             "timestamp": datetime.datetime.now().isoformat(),
             "transcript": transcript,
             "response": response_text,
+            "tool_calls": tool_calls_used,
             "session_id": session_id,
         }
         _conversation_log.append(turn)

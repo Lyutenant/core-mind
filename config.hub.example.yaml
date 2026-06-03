@@ -51,6 +51,20 @@ memory:
   enabled: true
   max_turns: 10
 
+tools:
+  enabled: true
+  # Built-in tools available out of the box (no API key needed):
+  #   time    — "What time is it?"
+  #   weather — "What's the weather in Tokyo?" (fetches from wttr.in)
+  built_in: [time, weather]
+  # mcp_servers:          # Phase B — connect to any MCP-compatible server
+  #   - name: filesystem
+  #     transport: stdio
+  #     command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
+  #   - name: node        # Phase C — Pi's local MCP server
+  #     transport: http
+  #     url: http://100.x.x.x:8767
+
 remote_brain:
   enabled: false   # Hub does not forward to another Hub
   url: ""

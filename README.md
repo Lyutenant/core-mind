@@ -5,9 +5,9 @@ A two-component voice assistant system built around a Raspberry Pi and a Mac Min
 ```
 [CoreMind Node]  ──audio──▶  [CoreMind Hub]  ──▶  Ollama LLM
  Raspberry Pi                  Mac Mini             (local)
- wake word                     STT (Whisper)
- VAD record                    TTS (Piper)
- play audio   ◀──audio──       response
+ wake word                     STT (Whisper)        tool calls?
+ VAD record                    tool loop     ──▶  weather / time / MCP…
+ play audio   ◀──audio──       TTS (Piper)
 ```
 
 **CoreMind Hub** runs on the Mac Mini. It serves a web dashboard, handles speech-to-text, calls the LLM, synthesizes the response, and returns audio to the Node.
@@ -96,13 +96,23 @@ brew install espeak-ng   # already done in 1.1 if you ran it
 
 ### 1.5 Create the Hub config
 
+**Option A — browser UI (recommended):**
+```bash
+source .venv/bin/activate
+coremind setup        # opens config UI at http://localhost:8766
+```
+Open the URL, set Mode to **Hub**, fill in the settings, click **Save Configuration**, then Ctrl+C and start the Hub normally.
+
+**Option B — copy the example file and edit manually:**
 ```bash
 cp config.hub.example.yaml config.yaml
 ```
 
-Edit `config.yaml`. Key Hub settings:
+Key Hub settings:
 
 ```yaml
+mode: hub
+
 app:
   name: Jarvis          # your assistant's name
 
@@ -121,8 +131,12 @@ brain:
 
 ollama:
   base_url: http://localhost:11434    # Ollama runs locally on Mac Mini
-  model: qwen3:8b                     # must be pulled: ollama pull qwen3:8b
-  no_think: true                      # skip chain-of-thought for faster voice responses
+  model: gemma4:e4b                   # must be pulled: ollama pull gemma4:e4b
+  no_think: false
+
+tools:
+  enabled: true
+  built_in: [time, weather]           # built-in tools available out of the box
 
 remote_brain:
   enabled: false    # Hub does not forward to another Hub
@@ -220,13 +234,23 @@ python -c "import openwakeword; openwakeword.utils.download_models()"
 
 ### 2.5 Create the Node config
 
+**Option A — browser UI:**
+```bash
+source .venv/bin/activate
+coremind setup        # opens config UI at http://<pi-ip>:8766
+```
+Set Mode to **Node**, enter the Hub URL, set audio device indexes, save, Ctrl+C.
+
+**Option B — copy the example file:**
 ```bash
 cp config.node.example.yaml config.yaml
 ```
 
-Edit `config.yaml`. Key Node settings:
+Key Node settings:
 
 ```yaml
+mode: node
+
 app:
   name: Jarvis   # must match the Hub's name
 
@@ -303,17 +327,18 @@ Open **http://localhost:8765** (or `http://<mac-mini-ip>:8765` from another mach
 
 | Section | What it shows |
 |---------|--------------|
-| Dashboard | Live conversation log, real-time processing status |
+| Dashboard | Live conversation log with tool call badges, real-time processing status |
 | System status (sidebar) | Ollama reachability, STT/TTS loaded state |
-| Settings → App | Assistant name, log level |
+| Settings → App | Mode (Hub/Node/Standalone), assistant name, log level |
 | Settings → STT | Whisper provider, model size, language |
 | Settings → TTS | Provider (Piper/espeak), model path, voice |
 | Settings → Ollama | Server URL, model, no-think, inference options |
 | Settings → Memory | Session memory max turns |
+| Settings → Tools | Enable/disable built-in tools (time, weather) |
 | Settings → VAD | Energy threshold, silence/max/min durations |
 | Settings → Wake Word | Provider, model, detection threshold |
 | Settings → Audio | Device indexes, sample rate, channels |
-| Settings → Remote Brain | Hub URL (for Node config reference) |
+| Settings → Hub Connection | Hub URL (for Node remote brain) |
 
 All settings are saved to `config.yaml` on the Hub when you click **Save Configuration**. The Hub reloads automatically — no restart required for most changes (STT/TTS/LLM model changes take effect on the next request).
 
@@ -354,6 +379,59 @@ sudo apt install espeak-ng
 
 ---
 
+## Part 5 — Tool Calling
+
+CoreMind uses the Ollama native tool API so the LLM can call real-world functions before answering. Tools are enabled on the Hub and run transparently — the LLM decides when to use them.
+
+### Built-in tools (available now)
+
+| Tool | Trigger example | Notes |
+|------|----------------|-------|
+| `get_current_time` | "What time is it?" | No external deps |
+| `get_weather` | "What's the weather in Tokyo?" | Fetches from wttr.in, no API key |
+
+Enable in Hub `config.yaml`:
+```yaml
+tools:
+  enabled: true
+  built_in: [time, weather]
+```
+
+When a tool fires, a chip badge appears on the turn card in the dashboard (e.g., `⚙ get_weather`).
+
+### Adding MCP servers (Phase B — coming soon)
+
+Any MCP-compatible server can be wired in through config — no code changes needed:
+
+```yaml
+tools:
+  mcp_servers:
+    - name: filesystem
+      transport: stdio
+      command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
+```
+
+### Node-side tools (Phase C — coming soon)
+
+The Pi can run a local MCP server exposing its own capabilities (music playback, volume control, etc.). The Hub connects to it over Tailscale just like any other MCP server:
+
+```yaml
+# Hub config.yaml
+tools:
+  mcp_servers:
+    - name: node
+      transport: http
+      url: http://100.x.x.x:8767   # Pi's Tailscale IP
+
+# Node config.yaml
+node_mcp:
+  enabled: true
+  port: 8767
+  music_dir: ~/Music
+```
+
+---
+
 ## Keeping the Node in Sync with the Hub
 
 When you push changes to the repo:
@@ -372,6 +450,10 @@ pip install -e ".[dev]"
 ## Commands Reference
 
 ```bash
+# Initial setup — any device (Hub or Node)
+coremind setup                          # open config UI at http://localhost:8766
+coremind setup --port 9000             # custom port
+
 # Hub (Mac Mini)
 coremind server                         # start Hub on port 8765
 coremind server --port 9000             # custom port
@@ -396,17 +478,19 @@ pytest                                  # run unit tests (no hardware required)
 
 ```
 coremind/
-  config/       Pydantic settings models (loaded from config.yaml)
-  audio_input/  Microphone recording + VAD
-  audio_output/ Speaker playback
-  stt/          Speech-to-text (faster-whisper, mock)
-  tts/          Text-to-speech (Piper, espeak, mock)
-  brain/        LLM client and router (Ollama, mock)
-  memory/       Session memory (short-term conversation context)
-  wake_word/    Wake-word detection (openwakeword, dummy/Enter-key)
-  vad/          Voice activity detection (energy-based)
-  server/       CoreMind Hub — FastAPI server + web dashboard
-  tools/        Tool registry (Phase 10, not yet implemented)
+  config/         Pydantic settings models (loaded from config.yaml)
+  audio_input/    Microphone recording + VAD
+  audio_output/   Speaker playback (with auto-resampling for USB speakers)
+  stt/            Speech-to-text (faster-whisper, mock)
+  tts/            Text-to-speech (Piper, espeak, mock)
+  brain/          LLM client and router (Ollama + tool calling, mock)
+  memory/         Session memory (short-term conversation context)
+  wake_word/      Wake-word detection (openwakeword/onnx, dummy/Enter-key)
+  vad/            Voice activity detection (energy-based)
+  server/         CoreMind Hub — FastAPI server + web dashboard
+  tools/          Tool layer — dispatcher, built-in tools, MCP client (Phase B)
+    built_in/     get_current_time, get_weather
+  node_mcp/       Node MCP server — exposes Pi capabilities to Hub (Phase C)
 ```
 
 ---
@@ -425,7 +509,9 @@ coremind/
 | 7 | Wake word (openwakeword) | ✓ |
 | 8 | Voice activity detection | ✓ |
 | 9 | CoreMind Hub web server + dashboard | ✓ |
-| 10 | Tool layer | planned |
+| 10a | Tool layer — built-in tools (time, weather) + Ollama tool loop | ✓ |
+| 10b | Tool layer — Hub MCP client (connect to any MCP server) | planned |
+| 10c | Tool layer — Node MCP server (Pi exposes local capabilities) | planned |
 | 11 | OpenClaw integration | planned |
 | 12 | systemd service | planned |
 | 13 | Observability / doctor command | planned |

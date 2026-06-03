@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 
 import httpx
 
@@ -8,6 +9,13 @@ from coremind import BrainError
 from coremind.brain.base import BrainClient
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class OllamaResult:
+    content: str
+    # Raw tool_call objects from Ollama: [{"function": {"name": ..., "arguments": {...}}}]
+    tool_calls: list[dict] = field(default_factory=list)
 
 
 def _inject_no_think(messages: list[dict]) -> list[dict]:
@@ -35,16 +43,12 @@ class OllamaClient(BrainClient):
         self.no_think = no_think
         self.options = options or {}
 
-    def ask(self, messages: list[dict]) -> str:
-        msgs = _inject_no_think(messages) if self.no_think else messages
+    def _post(self, payload: dict) -> dict:
         url = f"{self.base_url}/api/chat"
-        payload: dict = {"model": self.model, "messages": msgs, "stream": False}
-        if self.options:
-            payload["options"] = self.options
         try:
             response = httpx.post(url, json=payload, timeout=self.timeout)
             response.raise_for_status()
-            return response.json()["message"]["content"]
+            return response.json()
         except httpx.ConnectError as e:
             raise BrainError(
                 f"Cannot reach Ollama at {self.base_url}. "
@@ -63,6 +67,31 @@ class OllamaClient(BrainClient):
             raise BrainError(f"Network error communicating with Ollama: {e}") from e
         except (KeyError, ValueError) as e:
             raise BrainError(f"Unexpected Ollama response format: {e}") from e
+
+    def ask(self, messages: list[dict]) -> str:
+        msgs = _inject_no_think(messages) if self.no_think else messages
+        payload: dict = {"model": self.model, "messages": msgs, "stream": False}
+        if self.options:
+            payload["options"] = self.options
+        data = self._post(payload)
+        return data["message"]["content"]
+
+    def ask_with_tools(self, messages: list[dict], tools: list[dict]) -> OllamaResult:
+        msgs = _inject_no_think(messages) if self.no_think else messages
+        payload: dict = {
+            "model": self.model,
+            "messages": msgs,
+            "tools": tools,
+            "stream": False,
+        }
+        if self.options:
+            payload["options"] = self.options
+        data = self._post(payload)
+        msg = data.get("message", {})
+        return OllamaResult(
+            content=msg.get("content") or "",
+            tool_calls=msg.get("tool_calls") or [],
+        )
 
 
 class MockBrainClient(BrainClient):

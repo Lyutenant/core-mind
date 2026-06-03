@@ -106,6 +106,12 @@ class RemoteBrainConfig(BaseModel):
     timeout_seconds: float = 90.0
 
 
+class ToolsConfig(BaseModel):
+    enabled: bool = True
+    # Which built-in tools to register. Available: "time", "weather".
+    built_in: list[str] = ["time", "weather"]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix=_ENV_PREFIX,
@@ -131,6 +137,7 @@ class Settings(BaseSettings):
     vad: VADConfig = VADConfig()
     wake_word: WakeWordConfig = WakeWordConfig()
     remote_brain: RemoteBrainConfig = RemoteBrainConfig()
+    tools: ToolsConfig = ToolsConfig()
 
 
 def _coerce(val: str) -> object:

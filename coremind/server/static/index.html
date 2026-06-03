@@ -217,6 +217,17 @@
     .msg-role.you { color: var(--accent); }
     .msg-role.ai  { color: var(--success); }
     .msg-text  { font-size: 13.5px; line-height: 1.55; color: var(--text); }
+    .tool-calls { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 2px; }
+    .tool-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: color-mix(in srgb, var(--accent) 12%, var(--card-alt));
+      border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+      border-radius: 999px;
+      padding: 3px 10px 3px 8px;
+      font-size: 11px; font-family: var(--mono); color: var(--accent);
+      cursor: default;
+    }
+    .tool-chip-icon { font-size: 12px; }
 
     .processing-bar {
       padding: 9px 20px;
@@ -1091,6 +1102,16 @@ async function loadConversation() {
   turns.forEach(addTurnCard);
 }
 
+function renderToolChips(toolCalls) {
+  if (!toolCalls || !toolCalls.length) return '';
+  const chips = toolCalls.map(tc =>
+    `<span class="tool-chip" title="${esc(JSON.stringify(tc.args || {}))}: ${esc(tc.result || '')}">
+      <span class="tool-chip-icon">⚙</span>${esc(tc.name)}
+    </span>`
+  ).join('');
+  return `<div class="tool-calls">${chips}</div>`;
+}
+
 function addTurnCard(turn) {
   const log = document.getElementById('conversation-log');
   const card = document.createElement('div');
@@ -1107,6 +1128,7 @@ function addTurnCard(turn) {
         <div class="msg-role you">You</div>
         <div class="msg-text">${esc(turn.transcript)}</div>
       </div>
+      ${renderToolChips(turn.tool_calls)}
       <div class="msg-row">
         <div class="msg-role ai">${esc(assistantName)}</div>
         <div class="msg-text">${esc(turn.response)}</div>
@@ -1133,6 +1155,7 @@ function addPendingCard(transcript) {
         <div class="msg-role you">You</div>
         <div class="msg-text">${esc(transcript)}</div>
       </div>
+      <div class="tool-calls" id="pending-tools"></div>
       <div class="msg-row">
         <div class="msg-role ai">${esc(assistantName)}</div>
         <div class="msg-text" style="color:var(--text-dim)">Thinking…</div>
@@ -1141,8 +1164,18 @@ function addPendingCard(transcript) {
   log.scrollTop = log.scrollHeight;
 }
 
+function addPendingToolChip(name) {
+  const area = document.getElementById('pending-tools');
+  if (!area) return;
+  const chip = document.createElement('span');
+  chip.className = 'tool-chip';
+  chip.innerHTML = `<span class="tool-chip-icon">⚙</span>${esc(name)}`;
+  area.appendChild(chip);
+  area.closest('.turn-card').scrollIntoView({ behavior: 'smooth', block: 'end' });
+}
+
 function esc(s) {
-  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 async function clearConversation() {
@@ -1174,12 +1207,16 @@ function handleEvent(ev) {
     case 'transcript':
       addPendingCard(ev.text);
       break;
-    case 'turn':
+    case 'tool_call':
+      addPendingToolChip(ev.name);
+      break;
+    case 'turn': {
       const pending = document.getElementById('turn-pending');
       if (pending) pending.remove();
       addTurnCard(ev);
       refreshHealth();
       break;
+    }
     case 'config_saved':
       toast('Configuration saved', 'success');
       refreshHealth();

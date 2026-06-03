@@ -7,10 +7,29 @@ from dataclasses import dataclass, field
 class Tool(ABC):
     name: str
     description: str
-    requires_confirmation: bool = True
+    requires_confirmation: bool = False
+    # Full JSON Schema object for the tool's parameters.
+    # Example: {"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}
+    # Leave as empty dict for tools that take no arguments.
+    parameters: dict = {}
 
     @abstractmethod
     def run(self, **kwargs) -> str: ...
+
+    def to_ollama_schema(self) -> dict:
+        params = dict(self.parameters)
+        if "type" not in params:
+            params["type"] = "object"
+        if "properties" not in params:
+            params["properties"] = {}
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": params,
+            },
+        }
 
 
 @dataclass
