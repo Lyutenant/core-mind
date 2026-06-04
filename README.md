@@ -115,6 +115,11 @@ mode: hub
 
 app:
   name: Jarvis          # your assistant's name
+  user_location: "San Francisco, CA"   # default location for weather/time questions (optional)
+  user_timezone: "America/Los_Angeles" # IANA timezone — used by time tool (optional)
+
+runtime:
+  follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
 
 stt:
   provider: whisper_local
@@ -260,6 +265,9 @@ audio:
   output_device: null   # or: 0, 1, 2 — your speaker index
   sample_rate: 16000    # match your mic's native rate
 
+runtime:
+  follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
+
 remote_brain:
   enabled: true
   url: http://100.x.x.x:8765    # your Mac Mini's Tailscale IP from step 1.7
@@ -329,7 +337,7 @@ Open **http://localhost:8765** (or `http://<mac-mini-ip>:8765` from another mach
 |---------|--------------|
 | Dashboard | Live conversation log with tool call badges, real-time processing status |
 | System status (sidebar) | Ollama reachability, STT/TTS loaded state |
-| Settings → App | Mode (Hub/Node/Standalone), assistant name, log level |
+| Settings → App | Mode (Hub/Node/Standalone), assistant name, log level, user location/timezone |
 | Settings → STT | Whisper provider, model size, language |
 | Settings → TTS | Provider (Piper/espeak), model path, voice |
 | Settings → Ollama | Server URL, model, no-think, inference options |
@@ -387,7 +395,7 @@ CoreMind uses the Ollama native tool API so the LLM can call real-world function
 
 | Tool | Trigger example | Notes |
 |------|----------------|-------|
-| `get_current_time` | "What time is it?" | No external deps |
+| `get_current_time` | "What time is it?" | No external deps; uses `app.user_timezone` if set |
 | `get_weather` | "What's the weather in Tokyo?" | Fetches from wttr.in, no API key |
 
 Enable in Hub `config.yaml`:
@@ -396,6 +404,14 @@ tools:
   enabled: true
   built_in: [time, weather]
 ```
+
+Set a default location and timezone so you can ask "What's the weather?" or "What time is it?" without specifying a place:
+```yaml
+app:
+  user_location: "San Francisco, CA"   # used as fallback when no location is mentioned
+  user_timezone: "America/Los_Angeles" # IANA name — time tool reports in this timezone
+```
+You can still ask "What's the weather in Tokyo?" to override the default. The timezone must be a valid [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones); an invalid value logs a warning and falls back to the server's local time.
 
 When a tool fires, a chip badge appears on the turn card in the dashboard (e.g., `⚙ get_weather`).
 
