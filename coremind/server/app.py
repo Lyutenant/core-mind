@@ -29,11 +29,23 @@ _conversation_log: list[dict] = []
 _event_listeners: list[asyncio.Queue] = []
 _turn_count: int = 0
 
-_SYSTEM_PROMPT = (
-    "You are {name}, a voice assistant running on a Raspberry Pi. "
-    "Keep responses concise and conversational. "
-    "Avoid using markdown — your response will be spoken aloud."
-)
+def _build_system_prompt(s) -> str:
+    parts = [
+        f"You are {s.app.name}, a voice assistant running on a Raspberry Pi.",
+        "Keep responses concise and conversational.",
+        "Avoid using markdown — your response will be spoken aloud.",
+    ]
+    if s.app.user_location:
+        location_uses = "weather"
+        if s.app.user_timezone:
+            location_uses = "weather and time"
+        parts.append(
+            f"The user is located in {s.app.user_location}. "
+            f"When they ask about {location_uses} without specifying a place, use their location."
+        )
+    if s.app.user_timezone:
+        parts.append(f"The user's local timezone is {s.app.user_timezone}.")
+    return " ".join(parts)
 
 
 def configure(config_path: str | None = None) -> None:
@@ -107,7 +119,10 @@ def _get_dispatcher():
         s = _get_settings()
         _dispatcher = ToolDispatcher()
         if s.tools.enabled and s.tools.built_in:
-            _dispatcher.register_built_ins(s.tools.built_in)
+            _dispatcher.register_built_ins(
+                s.tools.built_in,
+                default_timezone=s.app.user_timezone,
+            )
             logger.info("Tools loaded: %s", s.tools.built_in)
     return _dispatcher
 
@@ -358,7 +373,7 @@ try:
 
         memory = _get_session(session_id)
         messages = (
-            [{"role": "system", "content": _SYSTEM_PROMPT.format(name=s.app.name)}]
+            [{"role": "system", "content": _build_system_prompt(s)}]
             + memory.get_messages()
             + [{"role": "user", "content": transcript}]
         )

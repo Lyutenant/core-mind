@@ -311,6 +311,7 @@ def _build_voice_loop(settings, *, enable_wake_word: bool = False, enable_vad: b
         vad_min_speech_seconds=settings.vad.min_speech_seconds,
         remote_url=remote_cfg.url if use_remote else None,
         remote_timeout=remote_cfg.timeout_seconds,
+        follow_up_seconds=settings.runtime.follow_up_seconds,
     )
 
 

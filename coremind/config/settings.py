@@ -20,6 +20,8 @@ _ENV_DELIMITER = "__"
 class AppConfig(BaseModel):
     name: str = "CoreMind"
     log_level: str = "INFO"
+    user_location: Optional[str] = None   # e.g. "San Francisco, CA"
+    user_timezone: Optional[str] = None   # IANA tz name e.g. "America/Los_Angeles"
 
     @field_validator("log_level")
     @classmethod
@@ -34,6 +36,7 @@ class AppConfig(BaseModel):
 class RuntimeConfig(BaseModel):
     mode: str = "push_to_talk"
     require_confirmation_for_actions: bool = True
+    follow_up_seconds: float = 5.0  # seconds to listen for follow-up after a response; 0.0 to disable
 
 
 class AudioConfig(BaseModel):

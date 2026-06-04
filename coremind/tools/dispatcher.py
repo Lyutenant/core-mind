@@ -27,13 +27,22 @@ class ToolDispatcher:
         self._tools[tool.name] = tool
         logger.debug("Registered tool: %s", tool.name)
 
-    def register_built_ins(self, names: list[str]) -> None:
+    def register_built_ins(
+        self,
+        names: list[str],
+        *,
+        default_timezone: str | None = None,
+    ) -> None:
         factories = _load_built_in_factories()
         for name in names:
-            if name in factories:
-                self.register(factories[name]())
-            else:
+            if name not in factories:
                 logger.warning("Unknown built-in tool: %r (available: %s)", name, list(factories))
+                continue
+            if name == "time":
+                from coremind.tools.built_in.time_tool import TimeTool
+                self.register(TimeTool(timezone=default_timezone))
+            else:
+                self.register(factories[name]())
 
     def get_tool_definitions(self) -> list[dict]:
         return [t.to_ollama_schema() for t in self._tools.values()]

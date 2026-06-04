@@ -8,10 +8,13 @@ mode: hub   # this device processes STT + LLM + TTS for Nodes
 app:
   name: Jarvis        # your assistant's name — must match the Node config
   log_level: INFO
+  user_location: null   # e.g. "San Francisco, CA" — used as default for weather/time questions
+  user_timezone: null   # IANA timezone e.g. "America/Los_Angeles", "Europe/London", "Asia/Tokyo"
 
 runtime:
   mode: push_to_talk
   require_confirmation_for_actions: true
+  follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
 
 stt:
   # provider: whisper_local (recommended) or mock (silent, for testing)

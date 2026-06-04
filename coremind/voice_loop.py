@@ -48,6 +48,7 @@ class VoiceLoop:
         vad_min_speech_seconds: float = 0.3,
         remote_url: str | None = None,
         remote_timeout: float = 90.0,
+        follow_up_seconds: float = 0.0,
     ) -> None:
         self._name = name
         self._recorder = recorder
@@ -66,6 +67,7 @@ class VoiceLoop:
         self._vad_min_speech_seconds = vad_min_speech_seconds
         self._remote_url = remote_url.rstrip("/") if remote_url else None
         self._remote_timeout = remote_timeout
+        self._follow_up_seconds = follow_up_seconds
         self._session_id = str(uuid.uuid4())
 
     def _system_messages(self) -> list[dict]:
@@ -75,6 +77,7 @@ class VoiceLoop:
         """[Wake word] → record → [remote or local] transcribe/LLM/TTS → [speak].
 
         Returns (transcript, response). Returns ("", "") if no speech detected.
+        After speaking, listens for follow-up turns until silence (if configured).
         """
         # Step 1: wait for trigger (Enter key or real wake word)
         if self._wake_word is not None:
@@ -84,34 +87,42 @@ class VoiceLoop:
             self._wake_fn()
 
         # Step 2: record — VAD stops at natural pause, fixed-duration otherwise
-        tmp_path: str | None = None
+        if self._vad is not None:
+            self._status("Speak now...")
+            result = self._recorder.record_with_vad(
+                vad=self._vad,
+                silence_seconds=self._vad_silence_seconds,
+                max_record_seconds=self._vad_max_record_seconds,
+                min_speech_seconds=self._vad_min_speech_seconds,
+            )
+            if result is None:
+                return "", ""
+            tmp_path = str(result)
+        else:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                tmp_path = f.name
+            self._recorder.record(seconds=self._record_seconds, output_path=tmp_path)
+            self._status("Recording complete.")
+
+        # Step 3: remote (Mac Mini handles STT + LLM + TTS) or local
+        if self._remote_url:
+            transcript, response = self._run_remote(tmp_path)
+        else:
+            transcript, response = self._process_local_wav(tmp_path)
+
+        if not transcript:
+            return "", ""
+
+        # Step 4: follow-up window — keep conversing without re-triggering wake word
+        return self._follow_up_loop(transcript, response)
+
+    def _process_local_wav(self, wav_path: str) -> tuple[str, str]:
+        """Transcribe + LLM + optional TTS. Deletes wav_path when done."""
         try:
-            if self._vad is not None:
-                self._status("Speak now...")
-                result = self._recorder.record_with_vad(
-                    vad=self._vad,
-                    silence_seconds=self._vad_silence_seconds,
-                    max_record_seconds=self._vad_max_record_seconds,
-                    min_speech_seconds=self._vad_min_speech_seconds,
-                )
-                if result is None:
-                    return "", ""
-                tmp_path = str(result)
-            else:
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                    tmp_path = f.name
-                self._recorder.record(seconds=self._record_seconds, output_path=tmp_path)
-                self._status("Recording complete.")
-
-            # Step 3: remote (Mac Mini handles STT + LLM + TTS) or local
-            if self._remote_url:
-                return self._run_remote(tmp_path)
-
             self._status("Transcribing...")
-            transcript = self._stt.transcribe(tmp_path)  # type: ignore[union-attr]
+            transcript = self._stt.transcribe(wav_path)  # type: ignore[union-attr]
         finally:
-            if tmp_path and not self._remote_url:
-                Path(tmp_path).unlink(missing_ok=True)
+            Path(wav_path).unlink(missing_ok=True)
 
         if not transcript.strip():
             return "", ""
@@ -127,6 +138,37 @@ class VoiceLoop:
             self._speak(response)
 
         return transcript, response
+
+    def _follow_up_loop(self, last_t: str, last_r: str) -> tuple[str, str]:
+        """After a response, listen for follow-up turns until silence or no VAD."""
+        if self._vad is None or self._follow_up_seconds <= 0:
+            return last_t, last_r
+
+        while True:
+            self._status("Listening...")
+            follow_wav = self._recorder.record_with_vad(
+                vad=self._vad,
+                silence_seconds=self._vad_silence_seconds,
+                max_record_seconds=self._vad_max_record_seconds,
+                min_speech_seconds=self._vad_min_speech_seconds,
+                onset_timeout=self._follow_up_seconds,
+            )
+            if follow_wav is None:
+                # Silence during follow-up window — return to idle / wake word
+                return last_t, last_r
+
+            try:
+                if self._remote_url:
+                    last_t, last_r = self._run_remote(str(follow_wav))
+                else:
+                    last_t, last_r = self._process_local_wav(str(follow_wav))
+            except Exception as e:
+                logger.error("Follow-up turn failed: %s", e)
+                Path(follow_wav).unlink(missing_ok=True)
+                return last_t, last_r
+
+            if not last_t:
+                return last_t, last_r
 
     def _run_remote(self, wav_path: str) -> tuple[str, str]:
         """POST wav to Mac Mini server; receive audio response + play it."""

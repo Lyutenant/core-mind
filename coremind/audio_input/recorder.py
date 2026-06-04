@@ -81,6 +81,7 @@ class Recorder:
         silence_seconds: float = 1.2,
         max_record_seconds: float = 20.0,
         min_speech_seconds: float = 0.3,
+        onset_timeout: Optional[float] = None,
         output_path: Optional[str] = None,
     ) -> Optional[Path]:
         """Record until VAD detects end-of-speech.
@@ -123,7 +124,9 @@ class Recorder:
                 blocksize=chunk_frames,
                 callback=_callback,
             ):
-                deadline = time.monotonic() + max_record_seconds + 2.0
+                now = time.monotonic()
+                deadline = now + max_record_seconds + 2.0
+                onset_deadline = (now + onset_timeout) if onset_timeout is not None else None
                 while time.monotonic() < deadline:
                     remaining = deadline - time.monotonic()
                     try:
@@ -135,6 +138,10 @@ class Recorder:
                         (chunk * 32767).clip(-32768, 32767).astype(np.int16).tobytes()
                     )
                     is_speech = vad.is_speech(pcm_bytes)
+
+                    # No speech yet and onset window expired → bail early
+                    if onset_deadline is not None and not speech_started and time.monotonic() > onset_deadline:
+                        break
 
                     if is_speech:
                         if not speech_started:
