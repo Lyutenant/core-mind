@@ -45,6 +45,11 @@ def _build_system_prompt(s) -> str:
         )
     if s.app.user_timezone:
         parts.append(f"The user's local timezone is {s.app.user_timezone}.")
+    if s.app.home_airport:
+        parts.append(
+            f"The user's home airport is {s.app.home_airport}. "
+            "Use it when they ask about aviation weather without specifying an airport."
+        )
     return " ".join(parts)
 
 
@@ -122,6 +127,8 @@ def _get_dispatcher():
             _dispatcher.register_built_ins(
                 s.tools.built_in,
                 default_timezone=s.app.user_timezone,
+                home_airport=s.app.home_airport,
+                taf_airport=s.app.taf_airport,
             )
             logger.info("Tools loaded: %s", s.tools.built_in)
     return _dispatcher

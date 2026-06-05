@@ -14,9 +14,10 @@ _BUILT_IN_FACTORIES: dict[str, type[Tool]] = {}
 
 
 def _load_built_in_factories() -> dict[str, type[Tool]]:
+    from coremind.tools.built_in.aviation_weather_tool import AviationWeatherTool
     from coremind.tools.built_in.time_tool import TimeTool
     from coremind.tools.built_in.weather_tool import WeatherTool
-    return {"time": TimeTool, "weather": WeatherTool}
+    return {"time": TimeTool, "weather": WeatherTool, "aviation_weather": AviationWeatherTool}
 
 
 class ToolDispatcher:
@@ -32,6 +33,8 @@ class ToolDispatcher:
         names: list[str],
         *,
         default_timezone: str | None = None,
+        home_airport: str | None = None,
+        taf_airport: str | None = None,
     ) -> None:
         factories = _load_built_in_factories()
         for name in names:
@@ -41,6 +44,9 @@ class ToolDispatcher:
             if name == "time":
                 from coremind.tools.built_in.time_tool import TimeTool
                 self.register(TimeTool(timezone=default_timezone))
+            elif name == "aviation_weather":
+                from coremind.tools.built_in.aviation_weather_tool import AviationWeatherTool
+                self.register(AviationWeatherTool(home_airport=home_airport, taf_airport=taf_airport))
             else:
                 self.register(factories[name]())
 

@@ -22,6 +22,8 @@ class AppConfig(BaseModel):
     log_level: str = "INFO"
     user_location: Optional[str] = None   # e.g. "San Francisco, CA"
     user_timezone: Optional[str] = None   # IANA tz name e.g. "America/Los_Angeles"
+    home_airport: Optional[str] = None    # ICAO code e.g. "KJYO"
+    taf_airport: Optional[str] = None     # nearest airport with TAF e.g. "KIAD"
 
     @field_validator("log_level")
     @classmethod
