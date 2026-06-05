@@ -448,6 +448,54 @@ node_mcp:
 
 ---
 
+## Part 6 — Running the Node as a Persistent Service (recommended)
+
+Running `coremind run` in tmux works, but a systemd user service starts automatically at boot and restarts on crashes — no SSH session required.
+
+### 6.1 Install the service file
+
+```bash
+# On the Pi
+mkdir -p ~/.config/systemd/user
+cp ~/core-mind/coremind/service/coremind.service ~/.config/systemd/user/coremind.service
+systemctl --user daemon-reload
+```
+
+### 6.2 Enable and start
+
+```bash
+systemctl --user enable coremind   # start automatically at login
+systemctl --user start coremind    # start right now
+```
+
+### 6.3 Start at boot (without needing to log in first)
+
+```bash
+loginctl enable-linger $USER
+```
+
+This tells systemd to start your user services at boot, even before you SSH in. Only needs to be run once.
+
+### 6.4 Check status and logs
+
+```bash
+systemctl --user status coremind
+journalctl --user -u coremind -f        # follow live logs
+journalctl --user -u coremind -n 50     # last 50 lines
+```
+
+### 6.5 Common commands
+
+```bash
+systemctl --user stop coremind          # stop the service
+systemctl --user restart coremind       # restart (e.g. after config change)
+systemctl --user disable coremind       # remove from auto-start
+```
+
+> **Note:** The service file uses `%h` for your home directory, so it works regardless of your username. It waits 3 seconds after start to let audio devices settle after boot.
+
+---
+
 ## Keeping the Node in Sync with the Hub
 
 When you push changes to the repo:
@@ -529,5 +577,5 @@ coremind/
 | 10b | Tool layer — Hub MCP client (connect to any MCP server) | planned |
 | 10c | Tool layer — Node MCP server (Pi exposes local capabilities) | planned |
 | 11 | OpenClaw integration | planned |
-| 12 | systemd service | planned |
+| 12 | systemd user service (Pi auto-start at boot) | ✓ |
 | 13 | Observability / doctor command | planned |

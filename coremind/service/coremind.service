@@ -1,28 +1,34 @@
-# NOTE: This service file is a template for Phase 12.
-# Do NOT enable it until `python -m coremind.main run` implements the full
-# voice loop (Phase 6). Enabling it before that point will cause the process
-# to exit immediately and systemd will enter a restart loop.
+# CoreMind Node — systemd user service
 #
-# Install instructions (Phase 12):
-#   sudo cp service/coremind.service /etc/systemd/system/coremind.service
-#   sudo systemctl daemon-reload
-#   sudo systemctl enable coremind
-#   sudo systemctl start coremind
-#   journalctl -u coremind -f
+# Install on Raspberry Pi:
+#   mkdir -p ~/.config/systemd/user
+#   cp ~/core-mind/coremind/service/coremind.service ~/.config/systemd/user/coremind.service
+#   systemctl --user daemon-reload
+#   systemctl --user enable coremind
+#   systemctl --user start coremind
+#
+# Start at boot without needing to log in first:
+#   loginctl enable-linger $USER
+#
+# Check logs:
+#   journalctl --user -u coremind -f
 
 [Unit]
-Description=CoreMind Voice Assistant
+Description=CoreMind Voice Assistant Node
+# Wait for network (Tailscale needs it to reach the Hub) and sound subsystem
 After=network-online.target sound.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/coremind
-ExecStart=/home/pi/coremind/.venv/bin/python -m coremind.main run
+# Resolve ~ to the real home directory
+WorkingDirectory=%h/core-mind
+ExecStart=%h/core-mind/.venv/bin/python -m coremind.main run
 Restart=on-failure
 RestartSec=5
+# Give audio devices time to settle after boot before first start attempt
+ExecStartPre=/bin/sleep 3
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
