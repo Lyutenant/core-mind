@@ -162,7 +162,7 @@
     .pill.standalone { border-color: var(--success); color: var(--success); background: rgba(34,197,94,.08); }
 
     /* ── View switching ── */
-    .view { display: none; flex: 1; overflow: hidden; }
+    .view { display: none; flex: 1; overflow: hidden; min-height: 0; }
     .view.active { display: flex; flex-direction: column; }
 
     /* ── Dashboard ── */
@@ -178,6 +178,7 @@
     }
     .conversation-log {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       padding: 20px;
       display: flex;

@@ -117,6 +117,8 @@ app:
   name: Jarvis          # your assistant's name
   user_location: "San Francisco, CA"   # default location for weather/time questions (optional)
   user_timezone: "America/Los_Angeles" # IANA timezone — used by time tool (optional)
+  home_airport: "KJYO"                 # default airport for aviation weather queries (optional)
+  taf_airport: "KIAD"                  # nearest airport with TAF, used when home airport lacks one
 
 runtime:
   follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
@@ -141,7 +143,7 @@ ollama:
 
 tools:
   enabled: true
-  built_in: [time, weather]           # built-in tools available out of the box
+  built_in: [time, weather, aviation_weather]   # add aviation_weather for METAR/TAF/PIREP
 
 remote_brain:
   enabled: false    # Hub does not forward to another Hub
@@ -396,24 +398,35 @@ CoreMind uses the Ollama native tool API so the LLM can call real-world function
 | Tool | Trigger example | Notes |
 |------|----------------|-------|
 | `get_current_time` | "What time is it?" | No external deps; uses `app.user_timezone` if set |
-| `get_weather` | "What's the weather in Tokyo?" | Fetches from wttr.in, no API key |
+| `get_weather` | "What's the weather?" / "Forecast for tomorrow?" | wttr.in, no API key; supports 1–3 day forecasts |
+| `get_aviation_weather` | "What's the METAR at Leesburg?" / "Any PIREPs nearby?" | NOAA aviationweather.gov, no API key; METAR/TAF/PIREP |
 
 Enable in Hub `config.yaml`:
 ```yaml
 tools:
   enabled: true
-  built_in: [time, weather]
+  built_in: [time, weather, aviation_weather]
 ```
 
-Set a default location and timezone so you can ask "What's the weather?" or "What time is it?" without specifying a place:
+**Weather and time defaults** — set a location and timezone so you can ask without specifying a place:
 ```yaml
 app:
-  user_location: "San Francisco, CA"   # used as fallback when no location is mentioned
+  user_location: "San Francisco, CA"   # fallback when no location is mentioned
   user_timezone: "America/Los_Angeles" # IANA name — time tool reports in this timezone
 ```
-You can still ask "What's the weather in Tokyo?" to override the default. The timezone must be a valid [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones); an invalid value logs a warning and falls back to the server's local time.
+You can still ask "What's the weather in Tokyo?" to override the default. The timezone must be a valid [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones); an invalid value logs a warning and falls back to server local time.
 
-When a tool fires, a chip badge appears on the turn card in the dashboard (e.g., `⚙ get_weather`).
+The `get_weather` tool supports multi-day forecasts. Ask "What's the forecast for this week?" or "Will it rain tomorrow?" and the LLM passes `days=2` or `days=3` automatically.
+
+**Aviation weather defaults** — set your home airport so you can ask without an ICAO code:
+```yaml
+app:
+  home_airport: "KJYO"   # used when no airport is specified
+  taf_airport: "KIAD"    # nearest airport with TAF (small airports often lack one)
+```
+Ask "What's the METAR?" → uses `home_airport`. Ask "Is there a TAF?" → tries `home_airport`, falls back to `taf_airport` automatically with a note. Ask "What's the METAR at KIAD?" to override. Use `report_type="full"` for a complete pre-flight briefing (METAR + TAF + PIREPs in one response).
+
+When a tool fires, a chip badge appears on the turn card in the dashboard (e.g., `⚙ get_aviation_weather`).
 
 ### Adding MCP servers (Phase B — coming soon)
 
@@ -553,7 +566,7 @@ coremind/
   vad/            Voice activity detection (energy-based)
   server/         CoreMind Hub — FastAPI server + web dashboard
   tools/          Tool layer — dispatcher, built-in tools, MCP client (Phase B)
-    built_in/     get_current_time, get_weather
+    built_in/     get_current_time, get_weather (multi-day), get_aviation_weather (METAR/TAF/PIREP)
   node_mcp/       Node MCP server — exposes Pi capabilities to Hub (Phase C)
 ```
 
@@ -573,7 +586,7 @@ coremind/
 | 7 | Wake word (openwakeword) | ✓ |
 | 8 | Voice activity detection | ✓ |
 | 9 | CoreMind Hub web server + dashboard | ✓ |
-| 10a | Tool layer — built-in tools (time, weather) + Ollama tool loop | ✓ |
+| 10a | Tool layer — built-in tools (time, weather, aviation weather) + Ollama tool loop | ✓ |
 | 10b | Tool layer — Hub MCP client (connect to any MCP server) | planned |
 | 10c | Tool layer — Node MCP server (Pi exposes local capabilities) | planned |
 | 11 | OpenClaw integration | planned |
