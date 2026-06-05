@@ -468,9 +468,15 @@ Running `coremind run` in tmux works, but a systemd user service starts automati
 ### 6.1 Install the service file
 
 ```bash
-# On the Pi
+# On the Pi — adjust the path if you cloned to a different location
+REPO=~/core-mind          # change to e.g. ~/Sandbox/core-mind if needed
+
 mkdir -p ~/.config/systemd/user
-cp ~/core-mind/coremind/service/coremind.service ~/.config/systemd/user/coremind.service
+cp $REPO/coremind/service/coremind.service ~/.config/systemd/user/coremind.service
+
+# Update the paths inside the installed file to match your repo location
+sed -i "s|%h/core-mind|$REPO|g" ~/.config/systemd/user/coremind.service
+
 systemctl --user daemon-reload
 ```
 

@@ -1,13 +1,20 @@
 # CoreMind Node — systemd user service
 #
+# BEFORE INSTALLING: update the paths below to match where you cloned the repo.
+# Default assumes ~/core-mind — change to e.g. ~/Sandbox/core-mind if needed.
+#
 # Install on Raspberry Pi:
+#   # 1. Edit WorkingDirectory and ExecStart below to match your repo path
 #   mkdir -p ~/.config/systemd/user
-#   cp ~/core-mind/coremind/service/coremind.service ~/.config/systemd/user/coremind.service
+#   cp <repo-path>/coremind/service/coremind.service ~/.config/systemd/user/coremind.service
 #   systemctl --user daemon-reload
 #   systemctl --user enable coremind
 #   systemctl --user start coremind
 #
-# Start at boot without needing to log in first:
+# To edit an already-installed service:
+#   systemctl --user edit --full coremind
+#
+# Start at boot without needing to log in first (run once):
 #   loginctl enable-linger $USER
 #
 # Check logs:
@@ -21,13 +28,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Resolve ~ to the real home directory
+# ── Update these two lines to match your repo location ──────────────────────
 WorkingDirectory=%h/core-mind
 ExecStart=%h/core-mind/.venv/bin/python -m coremind.main run
+# ────────────────────────────────────────────────────────────────────────────
 Restart=on-failure
 RestartSec=5
-# Give audio devices time to settle after boot before first start attempt
-ExecStartPre=/bin/sleep 3
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
