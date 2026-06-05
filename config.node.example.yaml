@@ -12,6 +12,7 @@ app:
 runtime:
   mode: push_to_talk
   require_confirmation_for_actions: true
+  follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
 
 audio:
   # Run `coremind audio list-devices` to find device indexes.
