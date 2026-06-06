@@ -360,8 +360,15 @@ class VoiceLoop:
             import numpy as np
             import sounddevice as sd
 
-            sr = 22050
             device = self._player.device if self._player is not None else None
+
+            # Use the device's native sample rate to avoid paInvalidSampleRate
+            # on devices that don't support 22050 Hz (e.g. many USB speakers).
+            try:
+                info = sd.query_devices(device, kind="output")
+                sr = int(info["default_samplerate"])
+            except Exception:
+                sr = 44100
 
             def _tone(freq: float, dur: float) -> np.ndarray:
                 t = np.linspace(0, dur, int(sr * dur), endpoint=False)
