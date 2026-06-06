@@ -39,6 +39,9 @@ def _setup_logging(level: str) -> None:
         datefmt="%H:%M:%S",
         stream=sys.stderr,
     )
+    # httpx logs every HTTP request at INFO — suppress routine heartbeat noise.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 @app.callback()
