@@ -496,6 +496,77 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+    /* ── Nodes view ── */
+    #view-nodes { overflow-y: auto; }
+    .nodes-wrap { max-width: 800px; margin: 0 auto; padding: 24px; width: 100%; }
+    .nodes-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .nodes-header h2 { font-size: 18px; font-weight: 700; }
+    .node-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: 12px; overflow: hidden;
+    }
+    .node-card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; cursor: pointer; user-select: none;
+    }
+    .node-card-header:hover { background: var(--accent-soft); }
+    .node-card-left { display: flex; align-items: center; gap: 10px; }
+    .node-name { font-size: 14px; font-weight: 600; }
+    .node-meta { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+    .node-card-body { border-top: 1px solid var(--border); padding: 16px; display: none; }
+    .node-card-body.open { display: block; }
+    .node-cfg-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 0; border-bottom: 1px solid var(--border);
+    }
+    .node-cfg-row:last-of-type { border-bottom: none; }
+    .node-cfg-label { flex: 0 0 220px; font-size: 12px; color: var(--text-muted); }
+    .node-cfg-val { font-size: 11.5px; font-family: var(--mono); color: var(--accent); width: 42px; text-align: right; }
+    input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; height: 6px; }
+    .nodes-empty { color: var(--text-dim); font-size: 13px; text-align: center; padding: 60px 20px; }
+
+    /* ── Bottom nav (mobile only) ── */
+    .bottom-nav { display: none; }
+
+    /* ── Mobile ── */
+    @media (max-width: 768px) {
+      html, body { font-size: 15px; overflow: hidden; }
+      .layout {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr;
+        height: calc(100dvh - 60px);
+      }
+      .sidebar { display: none; }
+      .main { height: calc(100dvh - 60px); }
+      .stats-panel { display: none; }
+      .bottom-nav {
+        display: flex;
+        position: fixed; bottom: 0; left: 0; right: 0;
+        height: 60px;
+        background: var(--sidebar-bg);
+        border-top: 1px solid var(--border);
+        z-index: 100;
+      }
+      .bottom-nav button {
+        flex: 1; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 3px;
+        border: none; background: none;
+        color: var(--text-muted); font-size: 11px; font-family: var(--font);
+        cursor: pointer; transition: color .15s; padding: 0; min-height: unset;
+      }
+      .bottom-nav button .bn-icon { font-size: 22px; line-height: 1; }
+      .bottom-nav button.active { color: var(--accent); }
+      .form-grid { grid-template-columns: 1fr !important; }
+      .form-grid .field:nth-child(odd) { border-right: none; }
+      .field:nth-last-child(-n+2) { border-bottom: 1px solid var(--border); }
+      .field:last-child { border-bottom: none; }
+      .settings-wrap, .nodes-wrap { padding: 14px 14px 80px; }
+      input[type=text], input[type=number], input[type=url], select, textarea, .btn { min-height: 44px; }
+      .tab-btn { min-height: 38px; }
+      input[type=range] { min-height: 36px; }
+      .node-cfg-label { flex: 0 0 160px; }
+    }
   </style>
 </head>
 <body>
@@ -516,6 +587,9 @@
     <nav class="nav">
       <div class="nav-item active" onclick="switchView('dashboard')" id="nav-dashboard">
         <span class="nav-icon">💬</span> Dashboard
+      </div>
+      <div class="nav-item" onclick="switchView('nodes')" id="nav-nodes">
+        <span class="nav-icon">📡</span> Nodes
       </div>
       <div class="nav-item" onclick="switchView('settings')" id="nav-settings">
         <span class="nav-icon">⚙️</span> Settings
@@ -957,7 +1031,34 @@
       </div>
     </section>
 
+    <!-- Nodes view -->
+    <section class="view" id="view-nodes">
+      <div class="nodes-wrap">
+        <div class="nodes-header">
+          <h2>Nodes</h2>
+          <button class="btn" onclick="loadNodes()">↻ Refresh</button>
+        </div>
+        <div id="nodes-list">
+          <div class="nodes-empty">No nodes registered yet.<br>Start CoreMind on a Pi to see it here.</div>
+        </div>
+      </div>
+    </section>
+
   </div><!-- /.main -->
+
+  <!-- Bottom nav (mobile only) -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button onclick="switchView('dashboard')" id="bn-dashboard" class="active">
+      <span class="bn-icon">💬</span>Chat
+    </button>
+    <button onclick="switchView('nodes')" id="bn-nodes">
+      <span class="bn-icon">📡</span>Nodes
+    </button>
+    <button onclick="switchView('settings')" id="bn-settings">
+      <span class="bn-icon">⚙️</span>Settings
+    </button>
+  </nav>
+
 </div><!-- /.layout -->
 
 <div class="toast-container" id="toasts"></div>
@@ -987,13 +1088,18 @@ const TAB_MODES = {
 function switchView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
-  document.getElementById('nav-' + name).classList.add('active');
+  const navItem = document.getElementById('nav-' + name);
+  if (navItem) navItem.classList.add('active');
+  const bnBtn = document.getElementById('bn-' + name);
+  if (bnBtn) bnBtn.classList.add('active');
   const modeLabel = { hub: 'Hub', node: 'Node', standalone: 'Standalone' }[currentMode] || '';
   document.getElementById('topbar-title').textContent =
-    name === 'dashboard' ? 'Dashboard' : (modeLabel + ' Settings');
+    name === 'dashboard' ? 'Dashboard' : name === 'nodes' ? 'Nodes' : (modeLabel + ' Settings');
   currentView = name;
   if (name === 'settings') loadConfig();
+  if (name === 'nodes') loadNodes();
 }
 
 // ── Tab switching ───────────────────────────────────────────────────────────
@@ -1227,6 +1333,17 @@ function handleEvent(ev) {
     case 'conversation_cleared':
       document.getElementById('conversation-log').innerHTML = '';
       break;
+    case 'node_connected':
+      if (currentView === 'nodes') loadNodes();
+      else toast(`Node connected: ${ev.name}`, 'success');
+      break;
+    case 'node_offline':
+      if (currentView === 'nodes') loadNodes();
+      else toast(`Node offline`, '');
+      break;
+    case 'node_config_changed':
+      if (currentView === 'nodes') loadNodes();
+      break;
   }
 }
 
@@ -1397,6 +1514,136 @@ function flatten(obj, prefix = '', out = {}) {
     }
   }
   return out;
+}
+
+// ── Nodes ────────────────────────────────────────────────────────────────────
+const NODE_DEFAULTS = {
+  wake_word_threshold:          0.5,
+  vad_energy_threshold:         0.01,
+  vad_silence_seconds:          1.2,
+  follow_up_seconds:            5.0,
+  post_response_cooldown_seconds: 1.0,
+};
+
+async function loadNodes() {
+  try {
+    const { nodes } = await fetch('/v1/nodes').then(r => r.json());
+    renderNodes(nodes);
+  } catch (e) {
+    document.getElementById('nodes-list').innerHTML =
+      '<div class="nodes-empty">Failed to load nodes.</div>';
+  }
+}
+
+function renderNodes(nodes) {
+  const el = document.getElementById('nodes-list');
+  if (!nodes || !nodes.length) {
+    el.innerHTML = '<div class="nodes-empty">No nodes registered yet.<br>Start CoreMind on a Pi to see it here.</div>';
+    return;
+  }
+  // Preserve open state
+  const openIds = new Set();
+  el.querySelectorAll('.node-card-body.open').forEach(b => openIds.add(b.id.replace('node-body-', '')));
+  el.innerHTML = '';
+  nodes.forEach(n => el.appendChild(buildNodeCard(n, openIds.has(n.node_id))));
+}
+
+function buildNodeCard(n, startOpen = false) {
+  const card = document.createElement('div');
+  card.className = 'node-card';
+  card.id = 'node-' + n.node_id;
+
+  const ago = n.last_seen_seconds < 5 ? 'just now'
+    : n.last_seen_seconds < 60 ? `${Math.round(n.last_seen_seconds)}s ago`
+    : `${Math.round(n.last_seen_seconds / 60)}m ago`;
+
+  const cfg = n.config_overrides || {};
+  const bodyOpen = startOpen ? ' open' : '';
+
+  card.innerHTML = `
+    <div class="node-card-header" onclick="toggleNodeCard('${n.node_id}')">
+      <div class="node-card-left">
+        <span class="dot ${n.online ? 'ok' : ''}"></span>
+        <div>
+          <div class="node-name">${esc(n.name)}</div>
+          <div class="node-meta">${esc(n.hostname)} · ${ago}</div>
+        </div>
+      </div>
+      <span class="pill ${n.online ? 'ok' : ''}">${n.online ? 'online' : 'offline'}</span>
+    </div>
+    <div class="node-card-body${bodyOpen}" id="node-body-${n.node_id}">
+      ${nodeSlider(n.node_id, 'wake_word_threshold',           'Wake Word Threshold',     cfg.wake_word_threshold,           0.1, 0.95, 0.05)}
+      ${nodeSlider(n.node_id, 'vad_energy_threshold',          'VAD Energy Threshold',    cfg.vad_energy_threshold,          0.001, 0.1, 0.001)}
+      ${nodeSlider(n.node_id, 'vad_silence_seconds',           'VAD Silence (s)',          cfg.vad_silence_seconds,           0.3, 4.0, 0.1)}
+      ${nodeSlider(n.node_id, 'follow_up_seconds',             'Follow-up Window (s)',     cfg.follow_up_seconds,             0.0, 15.0, 0.5)}
+      ${nodeSlider(n.node_id, 'post_response_cooldown_seconds','Post-response Cooldown (s)', cfg.post_response_cooldown_seconds, 0.0, 5.0, 0.25)}
+      <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn primary" onclick="saveNodeConfig('${n.node_id}')">Save</button>
+        <button class="btn" onclick="clearNodeConfig('${n.node_id}')">Reset to defaults</button>
+        <span class="save-msg" id="node-save-msg-${n.node_id}"></span>
+      </div>
+    </div>`;
+  return card;
+}
+
+function nodeSlider(nodeId, key, label, current, min, max, step) {
+  const hasOverride = current != null;
+  const val = hasOverride ? current : NODE_DEFAULTS[key];
+  const decimals = key.includes('energy') ? 3 : 2;
+  const displayVal = Number(val).toFixed(decimals);
+  const inputId = `ns-${nodeId}-${key}`;
+  const dispId  = `ns-v-${nodeId}-${key}`;
+  const note = hasOverride ? '' : ' <span style="color:var(--text-dim);font-size:10px">(default)</span>';
+  return `
+    <div class="node-cfg-row">
+      <span class="node-cfg-label">${label}${note}</span>
+      <input type="range" id="${inputId}" min="${min}" max="${max}" step="${step}" value="${val}"
+        oninput="document.getElementById('${dispId}').textContent=Number(this.value).toFixed(${decimals})">
+      <span class="node-cfg-val" id="${dispId}">${displayVal}</span>
+    </div>`;
+}
+
+function toggleNodeCard(nodeId) {
+  const body = document.getElementById('node-body-' + nodeId);
+  if (body) body.classList.toggle('open');
+}
+
+async function saveNodeConfig(nodeId) {
+  const keys = ['wake_word_threshold','vad_energy_threshold','vad_silence_seconds',
+                 'follow_up_seconds','post_response_cooldown_seconds'];
+  const cfg = {};
+  keys.forEach(k => {
+    const el = document.getElementById(`ns-${nodeId}-${k}`);
+    if (el && el.value !== '') cfg[k] = Number(el.value);
+  });
+  const msgEl = document.getElementById('node-save-msg-' + nodeId);
+  try {
+    const res = await fetch(`/v1/nodes/${nodeId}/config`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(cfg),
+    });
+    if (res.ok) {
+      if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'save-msg visible'; setTimeout(() => { msgEl.className = 'save-msg'; }, 3000); }
+      toast('Node config saved — takes effect within 30s', 'success');
+    } else {
+      if (msgEl) { msgEl.textContent = 'Error'; msgEl.className = 'save-msg error visible'; }
+    }
+  } catch (e) { toast('Failed to save node config', 'error'); }
+}
+
+async function clearNodeConfig(nodeId) {
+  const msgEl = document.getElementById('node-save-msg-' + nodeId);
+  try {
+    const res = await fetch(`/v1/nodes/${nodeId}/config`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({}),
+    });
+    if (res.ok) {
+      if (msgEl) { msgEl.textContent = '✓ Reset'; msgEl.className = 'save-msg visible'; setTimeout(() => { msgEl.className = 'save-msg'; }, 3000); }
+      toast('Node config reset to defaults', 'success');
+      loadNodes();
+    }
+  } catch (e) { toast('Failed to reset node config', 'error'); }
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

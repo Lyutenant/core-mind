@@ -312,6 +312,8 @@ def _build_voice_loop(settings, *, enable_wake_word: bool = False, enable_vad: b
         remote_url=remote_cfg.url if use_remote else None,
         remote_timeout=remote_cfg.timeout_seconds,
         follow_up_seconds=settings.runtime.follow_up_seconds,
+        follow_up_min_words=settings.runtime.follow_up_min_words,
+        post_response_cooldown_seconds=settings.runtime.post_response_cooldown_seconds,
     )
 
 
@@ -538,6 +540,228 @@ def setup_cmd(
         "    Standalone: [bold]coremind run[/bold]"
     )
     uvicorn.run(_server_app, host=host, port=port)
+
+
+# ---------------------------------------------------------------------------
+# Doctor command
+# ---------------------------------------------------------------------------
+
+@app.command("doctor")
+def doctor_cmd() -> None:
+    """Run system diagnostics: Python, config, audio, LLM, STT, TTS, disk."""
+    import shutil
+    import sys
+    import tempfile
+    from dataclasses import dataclass, field
+    from pathlib import Path
+
+    from rich import box
+    from rich.panel import Panel
+    from rich.table import Table
+
+    @dataclass
+    class Check:
+        name: str
+        status: str   # "ok" | "warn" | "fail" | "skip"
+        detail: str
+        hint: str = field(default="")
+
+    checks: list[Check] = []
+    settings = _get_settings()
+
+    # 1. Python version
+    vi = sys.version_info
+    version_str = f"{vi.major}.{vi.minor}.{vi.micro}"
+    if vi >= (3, 11):
+        checks.append(Check("Python version", "ok", version_str))
+    else:
+        checks.append(Check("Python version", "fail", version_str,
+                            "CoreMind requires Python 3.11+. Upgrade Python."))
+
+    # 2. Config file
+    config_path = Path(_config_path)
+    if config_path.exists():
+        checks.append(Check("Config file", "ok",
+                            f"{_config_path} loaded  (mode: {settings.mode})"))
+    else:
+        checks.append(Check("Config file", "warn",
+                            f"{_config_path} not found — using defaults",
+                            "Run 'coremind setup' to create a config file via the web UI."))
+
+    # 3. Audio input
+    try:
+        from coremind.audio_input.devices import list_input_devices
+        devs = list_input_devices()
+        if devs:
+            checks.append(Check("Audio input", "ok", f"{len(devs)} device(s) found"))
+        else:
+            checks.append(Check("Audio input", "warn", "No input devices found",
+                                "Check microphone. Run 'coremind audio list-devices'."))
+    except Exception as e:
+        checks.append(Check("Audio input", "fail", str(e),
+                            "sounddevice may be missing. Run: pip install sounddevice"))
+
+    # 4. Audio output
+    try:
+        from coremind.audio_input.devices import list_output_devices
+        devs = list_output_devices()
+        if devs:
+            checks.append(Check("Audio output", "ok", f"{len(devs)} device(s) found"))
+        else:
+            checks.append(Check("Audio output", "warn", "No output devices found",
+                                "Check speaker. Run 'coremind audio list-devices'."))
+    except Exception as e:
+        checks.append(Check("Audio output", "fail", str(e),
+                            "sounddevice may be missing. Run: pip install sounddevice"))
+
+    # 5. LLM / Hub reachability
+    if settings.mode == "node":
+        remote_url = settings.remote_brain.url
+        if not remote_url:
+            checks.append(Check("Hub connection", "fail", "remote_brain.url not set",
+                                "Set the Hub URL in config.yaml or run 'coremind setup'."))
+        else:
+            try:
+                import httpx
+                httpx.get(remote_url, timeout=5.0, follow_redirects=True)
+                checks.append(Check("Hub connection", "ok",
+                                    f"Hub reachable at {remote_url}"))
+            except Exception as e:
+                checks.append(Check("Hub connection", "fail",
+                                    f"{remote_url} — {type(e).__name__}",
+                                    "Is the Hub running? Run 'coremind server' on the Mac Mini."))
+    else:
+        ollama_url = settings.ollama.base_url
+        configured_model = settings.ollama.model
+        try:
+            import httpx
+            r = httpx.get(f"{ollama_url}/api/tags", timeout=5.0)
+            r.raise_for_status()
+            model_names = [m["name"] for m in r.json().get("models", [])]
+            available = configured_model in model_names
+            if available:
+                checks.append(Check("Ollama", "ok",
+                                    f"Reachable — model {configured_model!r} available"))
+            else:
+                short_list = ", ".join(model_names[:4]) or "none"
+                checks.append(Check("Ollama", "warn",
+                                    f"Reachable — model {configured_model!r} not found "
+                                    f"(available: {short_list})",
+                                    f"Run: ollama pull {configured_model}"))
+        except Exception as e:
+            checks.append(Check("Ollama", "fail",
+                                f"{ollama_url} unreachable — {type(e).__name__}",
+                                "Is Ollama running? Try: ollama serve"))
+
+    # 6. STT backend
+    if settings.mode == "node":
+        checks.append(Check("STT", "skip", "Not used on Node — Hub handles transcription"))
+    else:
+        stt_provider = settings.stt.provider
+        if stt_provider == "mock":
+            checks.append(Check("STT", "warn", "Using MockSTT — no real transcription",
+                                "Set stt.provider: whisper_local for real speech recognition."))
+        elif stt_provider == "whisper_local":
+            try:
+                import faster_whisper  # noqa: F401
+                checks.append(Check("STT", "ok",
+                                    f"faster-whisper available (model: {settings.stt.model})"))
+            except ImportError:
+                checks.append(Check("STT", "warn",
+                                    "faster-whisper not installed — will fall back to MockSTT",
+                                    r"Install: pip install 'coremind\[stt]'"))
+        else:
+            checks.append(Check("STT", "skip", f"Provider: {stt_provider!r}"))
+
+    # 7. TTS backend
+    if settings.mode == "node":
+        checks.append(Check("TTS", "skip", "Not used on Node — Hub sends audio WAV"))
+    else:
+        tts_provider = settings.tts.provider
+        if tts_provider == "mock":
+            checks.append(Check("TTS", "warn", "Using MockTTS — no audio playback",
+                                "Set tts.provider: espeak or piper_local."))
+        elif tts_provider == "espeak":
+            espeak_ng = shutil.which("espeak-ng")
+            if espeak_ng:
+                checks.append(Check("TTS", "ok", f"espeak-ng found ({espeak_ng})"))
+            elif shutil.which("espeak"):
+                checks.append(Check("TTS", "fail",
+                                    "only legacy espeak found — runtime requires espeak-ng",
+                                    "Install: sudo apt install espeak-ng"))
+            else:
+                checks.append(Check("TTS", "fail", "espeak-ng not on PATH",
+                                    "Install: sudo apt install espeak-ng"))
+        elif tts_provider == "piper_local":
+            model_path = settings.tts.model_path
+            if not model_path:
+                checks.append(Check("TTS", "fail", "tts.model_path not set",
+                                    "Set the path to your Piper .onnx voice model."))
+            elif not Path(model_path).exists():
+                checks.append(Check("TTS", "fail", f"model file not found: {model_path}",
+                                    "Download a voice at github.com/rhasspy/piper/releases"))
+            else:
+                try:
+                    from piper.voice import PiperVoice  # noqa: F401
+                    checks.append(Check("TTS", "ok",
+                                        f"piper-tts available, model: {model_path}"))
+                except ImportError:
+                    checks.append(Check("TTS", "warn",
+                                        "piper-tts not installed (model file found)",
+                                        r"Install: pip install 'coremind\[tts]'"))
+        else:
+            checks.append(Check("TTS", "skip", f"Provider: {tts_provider!r}"))
+
+    # 8. Disk write permission
+    write_dir = config_path.parent.resolve()
+    try:
+        with tempfile.NamedTemporaryFile(dir=write_dir, delete=True):
+            pass
+        checks.append(Check("Disk write", "ok", f"{write_dir} is writable"))
+    except Exception as e:
+        checks.append(Check("Disk write", "fail", str(e),
+                            "Check filesystem permissions for the config directory."))
+
+    # Render
+    _STATUS = {
+        "ok":   "[bold green]  OK  [/bold green]",
+        "warn": "[bold yellow] WARN [/bold yellow]",
+        "fail": "[bold red] FAIL [/bold red]",
+        "skip": "[dim] SKIP [/dim]",
+    }
+
+    table = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
+    table.add_column(width=7, no_wrap=True)
+    table.add_column(style="bold", width=18, no_wrap=True)
+    table.add_column()
+    table.add_column(style="dim italic")
+
+    for c in checks:
+        table.add_row(_STATUS[c.status], c.name, c.detail, c.hint)
+
+    fails = sum(1 for c in checks if c.status == "fail")
+    warns = sum(1 for c in checks if c.status == "warn")
+    if fails == 0 and warns == 0:
+        summary = "[bold green]All checks passed.[/bold green]"
+    else:
+        parts = []
+        if fails:
+            parts.append(f"[bold red]{fails} failure{'s' if fails != 1 else ''}[/bold red]")
+        if warns:
+            parts.append(f"[bold yellow]{warns} warning{'s' if warns != 1 else ''}[/bold yellow]")
+        summary = "  " + ",  ".join(parts) + "  "
+
+    console.print()
+    console.print(Panel(
+        table,
+        title=f"[bold]CoreMind Doctor[/bold]  —  mode: {settings.mode}",
+        subtitle=summary,
+        border_style="blue",
+    ))
+    console.print()
+
+    if fails:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

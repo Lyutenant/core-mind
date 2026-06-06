@@ -333,11 +333,12 @@ Speak your question. The audio is sent to the Hub, which transcribes, queries Ol
 
 ## Part 3 — Hub Web Dashboard
 
-Open **http://localhost:8765** (or `http://<mac-mini-ip>:8765` from another machine on Tailscale).
+Open **http://localhost:8765** (or `http://<mac-mini-ip>:8765` from another machine on Tailscale). The dashboard works on iPhone too — see [Mobile Access](#mobile-access--iphone--tailscale) below.
 
 | Section | What it shows |
 |---------|--------------|
 | Dashboard | Live conversation log with tool call badges, real-time processing status |
+| Nodes | Connected Pi Nodes with online/offline status and per-node setting sliders |
 | System status (sidebar) | Ollama reachability, STT/TTS loaded state |
 | Settings → App | Mode (Hub/Node/Standalone), assistant name, log level, user location/timezone |
 | Settings → STT | Whisper provider, model size, language |
@@ -351,6 +352,48 @@ Open **http://localhost:8765** (or `http://<mac-mini-ip>:8765` from another mach
 | Settings → Hub Connection | Hub URL (for Node remote brain) |
 
 All settings are saved to `config.yaml` on the Hub when you click **Save Configuration**. The Hub reloads automatically — no restart required for most changes (STT/TTS/LLM model changes take effect on the next request).
+
+### Nodes Panel
+
+When a Node starts and connects to the Hub, it automatically appears in the **Nodes** view — no pairing or approval step. Each Node card shows:
+
+- Name, hostname, online/offline status (green dot = seen in last 90 s)
+- Per-node setting sliders: wake word threshold, VAD energy, VAD silence, max record time, min speech, follow-up window, min follow-up words, post-response cooldown
+
+Changes pushed from the Nodes panel take effect on the Node **within 30 seconds** (the Node polls on each heartbeat cycle) — no restart required. Click **Reset to defaults** to clear all overrides; the Node reverts to its `config.yaml` values on the next poll.
+
+### Wake Word Threshold
+
+The `threshold` value (0.0–1.0) is the minimum confidence score the openwakeword model must output before it fires. The model runs every 80 ms and scores every chunk — threshold is just the cut-off.
+
+| Threshold | Behavior |
+|-----------|----------|
+| 0.3–0.4 | Very sensitive — low false-negative rate, more false positives from TV/background speech |
+| **0.5** | **Default** — balanced for quiet home environments |
+| 0.6–0.7 | Conservative — less likely to fire on background noise; may miss soft triggers |
+| 0.8+ | Very strict — useful only if false positives are constant and re-triggering is acceptable |
+
+In a noisy room (TV on, people talking), raise to 0.6–0.7 from the Nodes panel slider. You do not need to restart the Node.
+
+### Follow-up Conversation
+
+After speaking a response, the Node listens for a follow-up question without requiring the wake phrase again. Three mechanisms prevent the session from running indefinitely on background noise:
+
+- **Stop phrases** — saying "stop", "goodbye", "cancel", "that's all", etc. immediately ends the follow-up session and returns to wake-word mode.
+- **Min word filter** — if the transcribed follow-up is shorter than `follow_up_min_words` (default 2), it's discarded as likely background noise and the session ends.
+- **Post-response cooldown** — a brief pause (`post_response_cooldown_seconds`, default 1.0 s) after TTS playback before the mic reopens, so the speaker's audio cannot re-trigger recording.
+
+These are all tunable from the Nodes panel or `config.yaml` (under `runtime:`).
+
+### Mobile Access — iPhone + Tailscale
+
+The dashboard layout is responsive. On a phone:
+
+- The sidebar collapses and a **bottom tab bar** replaces it (Chat | Nodes | Settings).
+- Settings forms reflow to a single column.
+- All controls meet the 44 px minimum touch target size.
+
+Open `http://<mac-mini-tailscale-ip>:8765` in Safari on an iPhone connected to the same Tailscale network. Use "Add to Home Screen" to bookmark it as a web app.
 
 ---
 
@@ -551,9 +594,30 @@ coremind run                            # full mode: wake word + VAD + remote br
 coremind chat loop                      # push-to-talk loop (local mode, no wake word)
 coremind chat once                      # single push-to-talk interaction
 
+# Diagnostics (any device)
+coremind doctor                         # check Python, config, audio, Ollama, STT, TTS, disk
+
 # Development
 pytest                                  # run unit tests (no hardware required)
 ```
+
+### `coremind doctor`
+
+Runs a pre-flight check on the current machine and prints a colour-coded summary:
+
+```
+┌──────── CoreMind Doctor ────────────────────────┐
+│ Python          3.11.9                  [OK]     │
+│ Config file     config.yaml found       [OK]     │
+│ Audio devices   3 input, 2 output       [OK]     │
+│ Ollama          gemma4:e4b reachable    [OK]     │
+│ STT             faster-whisper 1.0.3    [OK]     │
+│ TTS             piper found             [OK]     │
+│ Disk write      /tmp writable           [OK]     │
+└─────────────────────────────────────────────────┘
+```
+
+Use this to diagnose setup problems before filing a bug report. Exit code is 1 if any check fails.
 
 ---
 
@@ -597,4 +661,7 @@ coremind/
 | 10c | Tool layer — Node MCP server (Pi exposes local capabilities) | planned |
 | 11 | OpenClaw integration | planned |
 | 12 | systemd user service (Pi auto-start at boot) | ✓ |
-| 13 | Observability / doctor command | planned |
+| 13 | Observability / `coremind doctor` command | ✓ |
+| 14 | Node auto-registration + Hub Nodes panel | ✓ |
+| 15 | Mobile-responsive dashboard (bottom tab bar, iPhone support) | ✓ |
+| 16 | Follow-up loop safety (stop phrases, min-word filter, cooldown) | ✓ |

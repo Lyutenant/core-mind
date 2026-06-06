@@ -16,7 +16,9 @@ app:
 runtime:
   mode: push_to_talk
   require_confirmation_for_actions: true
-  follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
+  follow_up_seconds: 5.0         # seconds to wait for speech onset before returning to wake word; 0.0 to disable
+  follow_up_min_words: 2         # ignore follow-up if transcript is this short (filters background noise)
+  post_response_cooldown_seconds: 1.0  # pause after playback before mic reopens (suppresses echo)
 
 stt:
   # provider: whisper_local (recommended) or mock (silent, for testing)

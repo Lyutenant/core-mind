@@ -38,7 +38,9 @@ class AppConfig(BaseModel):
 class RuntimeConfig(BaseModel):
     mode: str = "push_to_talk"
     require_confirmation_for_actions: bool = True
-    follow_up_seconds: float = 5.0  # seconds to listen for follow-up after a response; 0.0 to disable
+    follow_up_seconds: float = 5.0          # seconds to wait for speech onset before returning to wake word; 0.0 to disable
+    follow_up_min_words: int = 2             # discard follow-up if transcript is shorter; helps filter background noise
+    post_response_cooldown_seconds: float = 1.0  # silence after playback before mic reopens (suppresses echo)
 
 
 class AudioConfig(BaseModel):

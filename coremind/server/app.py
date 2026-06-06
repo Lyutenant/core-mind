@@ -28,6 +28,7 @@ _sessions: dict = {}
 _conversation_log: list[dict] = []
 _event_listeners: list[asyncio.Queue] = []
 _turn_count: int = 0
+_node_registry: dict[str, dict] = {}   # node_id → {name, hostname, online, last_seen, config_overrides}
 
 def _build_system_prompt(s) -> str:
     parts = [
@@ -232,6 +233,24 @@ try:
     _STATIC = Path(__file__).parent / "static"
 
     # -----------------------------------------------------------------------
+    # Background: mark nodes offline after 90s of missed heartbeats
+    # -----------------------------------------------------------------------
+
+    async def _node_offline_watcher():
+        while True:
+            await asyncio.sleep(30)
+            now = datetime.datetime.utcnow()
+            for node_id, info in list(_node_registry.items()):
+                if info.get("online") and (now - info["last_seen"]).total_seconds() > 90:
+                    _node_registry[node_id]["online"] = False
+                    _broadcast({"type": "node_offline", "node_id": node_id})
+                    logger.info("Node %s (%s) marked offline", info["name"], node_id[:8])
+
+    @app.on_event("startup")
+    async def _startup():
+        asyncio.create_task(_node_offline_watcher())
+
+    # -----------------------------------------------------------------------
     # Static / UI
     # -----------------------------------------------------------------------
 
@@ -341,6 +360,85 @@ try:
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    # -----------------------------------------------------------------------
+    # Node registration & remote config
+    # -----------------------------------------------------------------------
+
+    @app.post("/v1/nodes/register")
+    async def node_register(request: Request):
+        data = await request.json()
+        node_id = data.get("node_id", "")
+        if not node_id:
+            raise HTTPException(status_code=400, detail="node_id required")
+        name = data.get("name", "Node")
+        hostname = data.get("hostname", "unknown")
+        now = datetime.datetime.utcnow()
+        existing = _node_registry.get(node_id, {})
+        _node_registry[node_id] = {
+            "node_id": node_id,
+            "name": name,
+            "hostname": hostname,
+            "online": True,
+            "registered_at": existing.get("registered_at", now),
+            "last_seen": now,
+            "config_overrides": existing.get("config_overrides", {}),
+        }
+        _broadcast({"type": "node_connected", "node_id": node_id, "name": name, "hostname": hostname})
+        logger.info("Node registered: %s (%s @ %s)", name, node_id[:8], hostname)
+        return {"status": "registered", "config": _node_registry[node_id]["config_overrides"]}
+
+    @app.post("/v1/nodes/{node_id}/heartbeat")
+    async def node_heartbeat(node_id: str):
+        if node_id not in _node_registry:
+            raise HTTPException(status_code=404, detail="Unknown node — register first")
+        now = datetime.datetime.utcnow()
+        was_offline = not _node_registry[node_id].get("online")
+        _node_registry[node_id]["last_seen"] = now
+        _node_registry[node_id]["online"] = True
+        if was_offline:
+            info = _node_registry[node_id]
+            _broadcast({"type": "node_connected", "node_id": node_id,
+                        "name": info["name"], "hostname": info["hostname"]})
+        return {"status": "ok"}
+
+    @app.get("/v1/nodes")
+    async def list_nodes():
+        now = datetime.datetime.utcnow()
+        result = []
+        for info in _node_registry.values():
+            age = (now - info["last_seen"]).total_seconds()
+            result.append({
+                "node_id": info["node_id"],
+                "name": info["name"],
+                "hostname": info["hostname"],
+                "online": info["online"],
+                "last_seen_seconds": round(age, 1),
+                "config_overrides": info["config_overrides"],
+            })
+        return {"nodes": result}
+
+    @app.get("/v1/nodes/{node_id}/config")
+    async def get_node_config(node_id: str):
+        if node_id not in _node_registry:
+            raise HTTPException(status_code=404, detail="Unknown node — register first")
+        return _node_registry[node_id]["config_overrides"]
+
+    @app.put("/v1/nodes/{node_id}/config")
+    async def set_node_config(node_id: str, request: Request):
+        if node_id not in _node_registry:
+            raise HTTPException(status_code=404, detail="Unknown node — register first")
+        data = await request.json()
+        # Only accept known tunable keys
+        allowed = {
+            "wake_word_threshold", "vad_energy_threshold", "vad_silence_seconds",
+            "vad_max_record_seconds", "vad_min_speech_seconds",
+            "follow_up_seconds", "follow_up_min_words", "post_response_cooldown_seconds",
+        }
+        overrides = {k: v for k, v in data.items() if k in allowed}
+        _node_registry[node_id]["config_overrides"] = overrides
+        _broadcast({"type": "node_config_changed", "node_id": node_id, "config": overrides})
+        return {"status": "saved", "config": overrides}
 
     # -----------------------------------------------------------------------
     # Core audio processing endpoint (called by CoreMind Node / Pi)

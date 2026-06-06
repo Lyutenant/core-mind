@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import logging
+import socket
 import tempfile
+import threading
+import time
 import urllib.parse
 import uuid
 from pathlib import Path
@@ -20,6 +23,31 @@ if TYPE_CHECKING:
     from coremind.wake_word.base import WakeWordDetector
 
 logger = logging.getLogger(__name__)
+
+# Transcript phrases that explicitly end the follow-up session and return to wake-word mode.
+# Matched case-insensitively as whole words against the transcript.
+_STOP_PHRASES: frozenset[str] = frozenset([
+    "stop", "cancel", "goodbye", "bye", "good bye",
+    "nevermind", "never mind", "that's all", "that is all",
+    "enough", "quiet", "silence", "exit",
+])
+
+
+def _is_stop_phrase(transcript: str) -> bool:
+    """Return True if the transcript is (or contains) a stop/exit phrase."""
+    lowered = transcript.strip().lower()
+    if lowered in _STOP_PHRASES:
+        return True
+    # also match if entire transcript is just the phrase plus punctuation
+    words = lowered.split()
+    for phrase in _STOP_PHRASES:
+        phrase_words = phrase.split()
+        n = len(phrase_words)
+        for i in range(len(words) - n + 1):
+            if words[i:i + n] == phrase_words:
+                return True
+    return False
+
 
 _SYSTEM_PROMPT = (
     "You are {name}, a voice assistant running on a Raspberry Pi. "
@@ -49,6 +77,8 @@ class VoiceLoop:
         remote_url: str | None = None,
         remote_timeout: float = 90.0,
         follow_up_seconds: float = 0.0,
+        follow_up_min_words: int = 2,
+        post_response_cooldown_seconds: float = 1.0,
     ) -> None:
         self._name = name
         self._recorder = recorder
@@ -68,10 +98,95 @@ class VoiceLoop:
         self._remote_url = remote_url.rstrip("/") if remote_url else None
         self._remote_timeout = remote_timeout
         self._follow_up_seconds = follow_up_seconds
+        self._follow_up_min_words = follow_up_min_words
+        self._post_response_cooldown = post_response_cooldown_seconds
         self._session_id = str(uuid.uuid4())
+
+        # Node registration — only active when running in remote (node) mode
+        if self._remote_url:
+            from coremind.node_id import get_node_id
+            self._node_id = get_node_id()
+            t = threading.Thread(target=self._hub_sync_loop, daemon=True)
+            t.start()
+        else:
+            self._node_id = None
 
     def _system_messages(self) -> list[dict]:
         return [{"role": "system", "content": _SYSTEM_PROMPT.format(name=self._name)}]
+
+    # ------------------------------------------------------------------
+    # Node ↔ Hub sync (registration, heartbeat, config hot-reload)
+    # ------------------------------------------------------------------
+
+    def _hub_sync_loop(self) -> None:
+        """Background daemon: register with Hub, then heartbeat + config poll every 30s."""
+        import httpx
+
+        base = self._remote_url
+        node_id = self._node_id
+        name = self._name
+        hostname = socket.gethostname()
+
+        # Register immediately
+        self._hub_register(httpx, base, node_id, name, hostname)
+
+        while True:
+            time.sleep(30)
+            try:
+                httpx.post(
+                    f"{base}/v1/nodes/{node_id}/heartbeat",
+                    timeout=5.0,
+                )
+            except Exception as e:
+                logger.debug("Heartbeat failed: %s", e)
+
+            try:
+                r = httpx.get(f"{base}/v1/nodes/{node_id}/config", timeout=5.0)
+                if r.status_code == 200:
+                    self._apply_node_config(r.json())
+            except Exception as e:
+                logger.debug("Config poll failed: %s", e)
+
+    def _hub_register(self, httpx, base: str, node_id: str, name: str, hostname: str) -> None:
+        try:
+            r = httpx.post(
+                f"{base}/v1/nodes/register",
+                json={"node_id": node_id, "name": name, "hostname": hostname},
+                timeout=10.0,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                if "config" in data:
+                    self._apply_node_config(data["config"])
+                logger.info("Registered with Hub as Node %s (%s)", name, node_id[:8])
+            else:
+                logger.warning("Hub registration returned HTTP %s", r.status_code)
+        except Exception as e:
+            logger.warning("Hub registration failed (will retry on next heartbeat): %s", e)
+
+    def _apply_node_config(self, cfg: dict) -> None:
+        """Hot-reload soft settings received from Hub without restarting."""
+        if not cfg:
+            return
+        if "wake_word_threshold" in cfg and self._wake_word is not None:
+            if hasattr(self._wake_word, "_threshold"):
+                self._wake_word._threshold = float(cfg["wake_word_threshold"])
+        if "vad_energy_threshold" in cfg and self._vad is not None:
+            if hasattr(self._vad, "threshold"):
+                self._vad.threshold = float(cfg["vad_energy_threshold"])
+        if "vad_silence_seconds" in cfg:
+            self._vad_silence_seconds = float(cfg["vad_silence_seconds"])
+        if "vad_max_record_seconds" in cfg:
+            self._vad_max_record_seconds = float(cfg["vad_max_record_seconds"])
+        if "vad_min_speech_seconds" in cfg:
+            self._vad_min_speech_seconds = float(cfg["vad_min_speech_seconds"])
+        if "follow_up_seconds" in cfg:
+            self._follow_up_seconds = float(cfg["follow_up_seconds"])
+        if "follow_up_min_words" in cfg:
+            self._follow_up_min_words = int(cfg["follow_up_min_words"])
+        if "post_response_cooldown_seconds" in cfg:
+            self._post_response_cooldown = float(cfg["post_response_cooldown_seconds"])
+        logger.debug("Applied node config overrides: %s", list(cfg.keys()))
 
     def run_once(self) -> tuple[str, str]:
         """[Wake word] → record → [remote or local] transcribe/LLM/TTS → [speak].
@@ -140,12 +255,22 @@ class VoiceLoop:
         return transcript, response
 
     def _follow_up_loop(self, last_t: str, last_r: str) -> tuple[str, str]:
-        """After a response, listen for follow-up turns until silence or no VAD."""
+        """After a response, listen for follow-up turns until silence or no VAD.
+
+        Exits early when:
+        - no speech detected within follow_up_seconds (natural silence)
+        - transcript is a stop phrase ("stop", "goodbye", etc.)
+        - transcript is shorter than follow_up_min_words (likely background noise)
+        """
         if self._vad is None or self._follow_up_seconds <= 0:
             return last_t, last_r
 
         while True:
-            self._status("Listening...")
+            # Brief cooldown so the speaker's output doesn't re-trigger the mic
+            if self._post_response_cooldown > 0:
+                time.sleep(self._post_response_cooldown)
+
+            self._status("Listening for follow-up...")
             follow_wav = self._recorder.record_with_vad(
                 vad=self._vad,
                 silence_seconds=self._vad_silence_seconds,
@@ -168,6 +293,21 @@ class VoiceLoop:
                 return last_t, last_r
 
             if not last_t:
+                return last_t, last_r
+
+            # Stop phrase — user explicitly ended the session
+            if _is_stop_phrase(last_t):
+                logger.info("Stop phrase detected (%r) — returning to wake word", last_t)
+                self._status("Returning to wake word...")
+                return last_t, last_r
+
+            # Transcript too short — likely background noise, not a real command
+            if self._follow_up_min_words > 0 and len(last_t.split()) < self._follow_up_min_words:
+                logger.info(
+                    "Follow-up transcript too short (%r) — discarding, returning to wake word",
+                    last_t,
+                )
+                self._status("Returning to wake word...")
                 return last_t, last_r
 
     def _run_remote(self, wav_path: str) -> tuple[str, str]:
