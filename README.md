@@ -666,7 +666,6 @@ coremind/
 | 10a | Tool layer — built-in tools (time, weather, aviation weather) + Ollama tool loop | ✓ |
 | 10b | Tool layer — Hub MCP client (connect to any MCP server) | planned |
 | 10c | Tool layer — Node MCP server (Pi exposes local capabilities) | planned |
-| 11 | OpenClaw integration | planned |
 | 12 | systemd user service (Pi auto-start at boot) | ✓ |
 | 13 | Observability / `coremind doctor` command | ✓ |
 | 14 | Node auto-registration + Hub Nodes panel | ✓ |
