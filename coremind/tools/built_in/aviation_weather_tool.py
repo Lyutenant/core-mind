@@ -264,48 +264,84 @@ def _format_metar(obs: dict) -> str:
 
 
 def _format_taf(taf: dict) -> str:
-    name = taf.get("name", taf.get("icaoId", "unknown"))
-    fcsts = taf.get("fcsts") or []
+    icao = (taf.get("icaoId") or "").upper()
+    name = taf.get("name", icao)
+    station = f"{name} ({icao})" if icao and icao not in name else name
 
-    parts = [f"{name} forecast:"]
-    shown = 0
+    # Validity window
+    valid_from = taf.get("validTimeFrom")
+    valid_to = taf.get("validTimeTo")
+    validity_str = ""
+    if valid_from and valid_to:
+        try:
+            dt_f = datetime.datetime.fromtimestamp(int(valid_from), tz=datetime.timezone.utc)
+            dt_t = datetime.datetime.fromtimestamp(int(valid_to), tz=datetime.timezone.utc)
+            validity_str = (
+                f"Valid {dt_f.strftime('%d%H%M')} to {dt_t.strftime('%d%H%M')} Zulu."
+            )
+        except Exception:
+            pass
+
+    fcsts = taf.get("fcsts") or []
+    raw = (taf.get("rawTAF") or "").strip()
+
+    parts = [f"{station} TAF."]
+    if validity_str:
+        parts.append(validity_str)
+
     for fcst in fcsts:
-        if shown >= 4:
-            break
         change = fcst.get("fcstChange")
         prob = fcst.get("probability")
         time_from = fcst.get("timeFrom")
+        time_to = fcst.get("timeTo")
 
         wind = _wind(fcst.get("wdir"), fcst.get("wspd"), fcst.get("wgst"))
         vis = _visibility(fcst.get("visib"))
         sky = _sky(fcst.get("clouds") or [])
-        wx = fcst.get("wxString") or ""
+        wx = (fcst.get("wxString") or "").strip()
 
-        conditions = []
-        conditions.append(wind)
+        # Wind shear
+        ws_hgt = fcst.get("wshearHgt")
+        ws_dir = fcst.get("wshearDir")
+        ws_spd = fcst.get("wshearSpd")
+        ws_str = ""
+        if ws_hgt and ws_dir and ws_spd:
+            try:
+                ws_str = (
+                    f"Wind shear at {int(ws_hgt):,} feet, "
+                    f"{int(ws_dir):03d} at {int(ws_spd)} knots."
+                )
+            except (TypeError, ValueError):
+                pass
+
+        conds = [wind.capitalize() + "."]
         if vis:
-            conditions.append(vis)
-        conditions.append(sky)
-        if wx.strip():
-            conditions.append(wx.strip())
-        cond_str = ", ".join(conditions) + "."
+            conds.append(vis.capitalize() + ".")
+        if wx:
+            conds.append(f"Present weather: {wx}.")
+        conds.append(sky.capitalize() + ".")
+        if ws_str:
+            conds.append(ws_str)
+        cond_str = " ".join(conds)
 
+        # Time prefix
         if change is None:
-            # Initial forecast period
-            parts.append(cond_str.capitalize())
+            prefix = "Initially: "
         elif change == "FM" and time_from:
-            label = _timestamp_to_label(time_from)
-            parts.append(f"From {label}: {cond_str}")
-        elif change in ("BECMG", "TEMPO") and time_from:
-            label = _timestamp_to_label(time_from)
-            verb = "Becoming" if change == "BECMG" else "Temporarily"
-            parts.append(f"{verb} after {label}: {cond_str}")
-        elif prob and time_from:
-            label = _timestamp_to_label(time_from)
-            parts.append(f"{prob}% chance after {label}: {cond_str}")
+            prefix = f"From {_timestamp_to_label(time_from)}: "
+        elif change == "BECMG" and time_from and time_to:
+            prefix = f"Becoming {_timestamp_to_label(time_from)} through {_timestamp_to_label(time_to)}: "
+        elif change == "TEMPO" and time_from and time_to:
+            prefix = f"Temporarily {_timestamp_to_label(time_from)} to {_timestamp_to_label(time_to)}: "
+        elif prob and time_from and time_to:
+            prefix = f"{prob}% probability {_timestamp_to_label(time_from)} to {_timestamp_to_label(time_to)}: "
         else:
-            parts.append(cond_str.capitalize())
-        shown += 1
+            prefix = ""
+
+        parts.append(f"{prefix}{cond_str}")
+
+    if raw:
+        parts.append(f"Raw TAF: {raw}.")
 
     return " ".join(parts)
 
