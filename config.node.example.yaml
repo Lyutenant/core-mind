@@ -106,7 +106,7 @@ tools:
   # Only relevant when remote_brain is disabled (standalone/local mode).
   # In remote-brain mode the Hub executes tools; the Node does not.
   enabled: true
-  built_in: [time, weather, aviation_weather]
+  built_in: [time, weather, aviation_weather, airport]
   # mcp_servers: []   # MCP servers to connect to at startup (requires pip install 'coremind[tools]')
 
 # Node MCP server — exposes Pi-local capabilities (music, volume) to the Hub's LLM.

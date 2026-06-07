@@ -123,7 +123,7 @@ class MCPServerConfig(BaseModel):
 class ToolsConfig(BaseModel):
     enabled: bool = True
     # Which built-in tools to register. Available: "time", "weather", "aviation_weather".
-    built_in: list[str] = ["time", "weather"]
+    built_in: list[str] = ["time", "weather", "airport"]
     # External MCP servers to connect to at Hub startup.
     mcp_servers: list[MCPServerConfig] = []
 

@@ -14,10 +14,16 @@ _BUILT_IN_FACTORIES: dict[str, type[Tool]] = {}
 
 
 def _load_built_in_factories() -> dict[str, type[Tool]]:
+    from coremind.tools.built_in.airport_tool import AirportTool
     from coremind.tools.built_in.aviation_weather_tool import AviationWeatherTool
     from coremind.tools.built_in.time_tool import TimeTool
     from coremind.tools.built_in.weather_tool import WeatherTool
-    return {"time": TimeTool, "weather": WeatherTool, "aviation_weather": AviationWeatherTool}
+    return {
+        "time": TimeTool,
+        "weather": WeatherTool,
+        "aviation_weather": AviationWeatherTool,
+        "airport": AirportTool,
+    }
 
 
 class ToolDispatcher:

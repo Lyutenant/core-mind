@@ -58,7 +58,7 @@ memory:
 
 tools:
   enabled: true
-  built_in: [time, weather]
+  built_in: [time, weather, airport]
   # mcp_servers: []   # Phase B — list of MCP server connections
 
 vad:

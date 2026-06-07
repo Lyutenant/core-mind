@@ -862,17 +862,19 @@ _SUFFIX_NAMES = {
 @atc_app.command("scan")
 def atc_scan(
     icaos: list[str] = typer.Argument(..., help="ICAO codes to scan, e.g. KEWR KJFK KIAD"),
-    airport_names: str = typer.Option("", "--names", help="Comma-separated airport names matching ICAO order"),
+    airport_names: str = typer.Option("", "--names", help="Override airport names (comma-separated, matched by order)"),
     rate: float = typer.Option(1.0, "--rate", "-r", help="Requests per second (default: 1.0)"),
 ) -> None:
-    """Probe LiveATC.net for standard ATC streams and add them to the catalog.
+    """Probe for standard ATC streams and add them to the catalog.
 
-    Use 'coremind atc add' for airports with non-standard (obfuscated) mount names.
+    Airport names are looked up automatically from the bundled ICAO database.
+    Use --names to override. Use 'coremind atc add' for non-standard (obfuscated) mounts.
     """
     import time
 
     import httpx
 
+    from coremind.airports import lookup_icao
     from coremind.node_mcp.atc_catalog import (
         ATCCatalog,
         empty_catalog,
@@ -886,13 +888,18 @@ def atc_scan(
     data = load_atc_catalog(catalog_path) or empty_catalog()
     catalog = ATCCatalog(data)
 
-    name_list = [n.strip() for n in airport_names.split(",") if n.strip()]
+    name_overrides = [n.strip() for n in airport_names.split(",") if n.strip()]
     delay = 1.0 / max(rate, 0.1)
 
     total_new = 0
     for i, icao in enumerate(icaos):
         icao = icao.upper().strip()
-        airport_name = name_list[i] if i < len(name_list) else ""
+        # Prefer explicit override, fall back to bundled database
+        if i < len(name_overrides):
+            airport_name = name_overrides[i]
+        else:
+            db_info = lookup_icao(icao)
+            airport_name = db_info["name"] if db_info else ""
         console.print(f"\n[bold]{icao}[/bold]{' — ' + airport_name if airport_name else ''}")
 
         for suffix in _ATC_SUFFIXES:
@@ -939,12 +946,13 @@ def atc_scan(
 @atc_app.command("add")
 def atc_add(
     icao: str = typer.Argument(..., help="Airport ICAO code, e.g. KIAD"),
-    name: str = typer.Argument(..., help="Channel name, e.g. 'Tower'"),
-    mount: str = typer.Argument(..., help="LiveATC mount name, e.g. kiad1_twr_1c19c_120250"),
+    name: str = typer.Argument(..., help="Channel name, e.g. 'Tower Runway 1C/19C'"),
+    mount: str = typer.Argument(..., help="Stream mount name, e.g. kiad1_twr_1c19c_120250"),
     freq: str = typer.Option("", "--freq", "-f", help="Frequency in MHz, e.g. 120.250"),
-    airport_name: str = typer.Option("", "--airport-name", "-a", help="Full airport name, e.g. 'Washington Dulles'"),
+    airport_name: str = typer.Option("", "--airport-name", "-a", help="Override airport name (auto-looked up if omitted)"),
 ) -> None:
     """Manually add or update an ATC channel (for airports with non-standard mounts)."""
+    from coremind.airports import lookup_icao
     from coremind.node_mcp.atc_catalog import (
         ATCCatalog,
         empty_catalog,
@@ -958,9 +966,15 @@ def atc_add(
     data = load_atc_catalog(catalog_path) or empty_catalog()
     catalog = ATCCatalog(data)
 
+    # Auto-fill airport name from database if not provided
+    resolved_name = airport_name.strip()
+    if not resolved_name:
+        db_info = lookup_icao(icao)
+        resolved_name = db_info["name"] if db_info else ""
+
     channel: dict = {
         "airport": icao.upper().strip(),
-        "airport_name": airport_name.strip(),
+        "airport_name": resolved_name,
         "name": name.strip(),
         "mount": mount.strip(),
     }

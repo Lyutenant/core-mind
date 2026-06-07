@@ -64,9 +64,10 @@ tools:
   #   time             — "What time is it?"
   #   weather          — "What's the weather in Tokyo?" (fetches from wttr.in)
   #   aviation_weather — "What's the METAR at Leesburg?" (NOAA aviationweather.gov)
-  built_in: [time, weather]
-  # Add aviation_weather to built_in to enable METAR/TAF/PIREP queries:
-  # built_in: [time, weather, aviation_weather]
+  #   airport          — "What's the ICAO for Heathrow?" (bundled offline database)
+  built_in: [time, weather, airport]
+  # Full set including aviation tools:
+  # built_in: [time, weather, aviation_weather, airport]
   #
   # MCP servers — connect to any MCP-compatible server.
   # Requires: pip install 'coremind[tools]'
