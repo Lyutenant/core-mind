@@ -18,9 +18,11 @@ app = typer.Typer(
 )
 audio_app = typer.Typer(help="Audio device diagnostics and testing.")
 chat_app = typer.Typer(help="Voice interaction commands.")
+music_app = typer.Typer(help="Music library management.")
 
 app.add_typer(audio_app, name="audio")
 app.add_typer(chat_app, name="chat")
+app.add_typer(music_app, name="music")
 
 _settings = None
 _config_path: str = "config.yaml"
@@ -457,6 +459,7 @@ def run() -> None:
             _asyncio.run(
                 run_node_mcp_server(
                     music_dir=settings.node_mcp.music_dir,
+                    catalog_path=settings.node_mcp.catalog_path,
                     port=settings.node_mcp.port,
                 )
             )
@@ -805,6 +808,34 @@ def doctor_cmd() -> None:
 
     if fails:
         raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# Music commands
+# ---------------------------------------------------------------------------
+
+@music_app.command("scan")
+def music_scan() -> None:
+    """Scan the music library and rebuild the catalog from folder structure."""
+    settings = _get_settings()
+    from coremind.node_mcp.catalog import scan_library, save_catalog
+
+    music_dir = Path(settings.node_mcp.music_dir).expanduser()
+    catalog_path = Path(settings.node_mcp.catalog_path).expanduser()
+
+    if not music_dir.exists():
+        console.print(f"[red]Music directory not found:[/red] {music_dir}")
+        raise typer.Exit(code=1)
+
+    console.print(f"Scanning [cyan]{music_dir}[/cyan] …")
+    data = scan_library(music_dir)
+    save_catalog(data, catalog_path)
+    console.print(
+        f"[green]Catalog saved:[/green] {catalog_path}\n"
+        f"  Tracks:  {len(data['tracks'])}\n"
+        f"  Artists: {len(data['artists'])}\n"
+        f"  Albums:  {len(data['albums'])}"
+    )
 
 
 if __name__ == "__main__":

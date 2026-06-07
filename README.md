@@ -508,11 +508,11 @@ MCP server 'node': 4 tool(s) registered
 
 ### Voice-controlled music player (Phase C — Node MCP server)
 
-The Pi runs a local MCP server on port 8767 that exposes four tools: `search_music`, `play_music`, `stop_playback`, and `set_volume`. The Hub's LLM calls these over Tailscale just like any other tool.
+The Pi runs a local MCP server on port 8767 that exposes 13 tools for searching, playing, and organizing music. The Hub's LLM calls these over Tailscale just like any other tool.
 
 **Pi setup:**
 ```bash
-sudo apt install mpv          # audio player used by play_music
+sudo apt install mpv          # audio player
 pip install 'coremind[tools]' # mcp SDK
 ```
 
@@ -521,7 +521,8 @@ Add to Node `config.yaml`:
 node_mcp:
   enabled: true
   port: 8767
-  music_dir: ~/Music   # directory searched recursively for audio files
+  music_dir: ~/Music                           # root of your music library
+  catalog_path: ~/.coremind/music-catalog.json # built by 'coremind music scan'
 ```
 
 Add to Hub `config.yaml`:
@@ -533,13 +534,48 @@ tools:
       url: http://100.x.x.x:8767   # Pi's Tailscale IP
 ```
 
-**Voice commands:**
-- "Play some jazz" → searches `~/Music` for files/folders with "jazz" in the name → plays the first match via mpv
-- "Stop the music" → terminates mpv
-- "Set the volume to 60 percent" → calls `pactl` (or `amixer` if pactl is unavailable)
-- "Play Kind of Blue" → finds that specific album or file
+**Music library organization**
 
-Music is searched by **filename and parent directory name** — organize `~/Music` by genre or artist folders for best results (e.g. `~/Music/jazz/`, `~/Music/Miles Davis/`).
+Organize your music library with Artist and Album subfolders — the catalog builder infers structure from folder depth:
+
+```
+~/Music/
+  Miles Davis/
+    Kind of Blue/
+      01 - So What.mp3
+      02 - Freddie Freeloader.mp3
+  John Coltrane/
+    A Love Supreme/
+      01 - Acknowledgement.mp3
+```
+
+After adding music, build the catalog:
+```bash
+coremind music scan
+# Scanned 127 tracks — 12 artists, 18 albums.
+```
+
+The catalog is saved to `~/.coremind/music-catalog.json`. Re-run whenever you add new music. CoreMind warns in the logs if the music directory is newer than the catalog.
+
+**Available MCP tools (13):**
+
+| Tool | Voice example |
+|------|--------------|
+| `search_music` | "Find any jazz tracks" |
+| `play_track` | "Play /home/pi/Music/..." |
+| `play_artist` | "Play Miles Davis" / "Play all Coltrane, shuffled" |
+| `play_album` | "Play Kind of Blue" |
+| `play_playlist` | "Play my morning playlist" |
+| `stop_playback` | "Stop the music" |
+| `set_volume` | "Set the volume to 60 percent" |
+| `list_artists` | "What artists do I have?" |
+| `list_albums` | "What albums by Miles Davis?" |
+| `list_playlists` | "What playlists do I have?" |
+| `create_playlist` | "Create a playlist called 'morning jazz' with these three tracks" |
+| `add_to_playlist` | "Add that album to my workout playlist" |
+| `remove_from_playlist` | "Remove that track from morning jazz" |
+
+Playlists are persisted in the catalog JSON immediately and survive Node restarts.
 
 **Mic isolation during playback**
 
@@ -639,6 +675,9 @@ coremind chat once                      # single push-to-talk interaction
 
 # Diagnostics (any device)
 coremind doctor                         # check Python, config, audio, Ollama, STT, TTS, disk
+
+# Music library (Node)
+coremind music scan                     # scan ~/Music and build ~/.coremind/music-catalog.json
 
 # Node systemd service (Pi)
 systemctl --user status coremind        # show service status

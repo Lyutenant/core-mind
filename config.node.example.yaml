@@ -101,4 +101,5 @@ openclaw:
 node_mcp:
   enabled: false       # set true to expose music/volume tools to the Hub
   port: 8767
-  music_dir: ~/Music   # directory searched for audio files
+  music_dir: ~/Music   # root of your music library (Artist/Album/track structure)
+  catalog_path: ~/.coremind/music-catalog.json   # run 'coremind music scan' to build
