@@ -362,6 +362,10 @@ When a Node starts and connects to the Hub, it automatically appears in the **No
 
 Changes pushed from the Nodes panel take effect on the Node **within 30 seconds** (the Node polls on each heartbeat cycle) — no restart required. Click **Reset to defaults** to clear all overrides; the Node reverts to its `config.yaml` values on the next poll.
 
+**Overrides survive restarts.** The Hub persists overrides to `~/.coremind/node-overrides.json`. On Node reconnect, both sides compare timestamps and the **most recently changed config wins**: if you edited `config.yaml` on the Pi after the last dashboard save, the Pi's values become the new override. If the dashboard was updated more recently, the Hub values win. This means you can tune settings from either the file or the browser and they will stay in sync.
+
+All connected browsers (Mac Mini, iPhone, etc.) receive SSE events for node state changes and immediately refresh their Nodes panel — no manual reload needed.
+
 ### Wake Word Threshold
 
 The `threshold` value (0.0–1.0) is the minimum confidence score the openwakeword model must output before it fires. The model runs every 80 ms and scores every chunk — threshold is just the cut-off.
@@ -468,6 +472,10 @@ app:
   taf_airport: "KIAD"    # nearest airport with TAF (small airports often lack one)
 ```
 Ask "What's the METAR?" → uses `home_airport`. Ask "Is there a TAF?" → tries `home_airport`, falls back to `taf_airport` automatically with a note. Ask "What's the METAR at KIAD?" to override. Use `report_type="full"` for a complete pre-flight briefing (METAR + TAF + PIREPs in one response).
+
+METAR output includes: station name + ICAO, flight category, observation time and age in minutes, wind (including variable/VRB and gusts), visibility, present weather, each sky layer with ceiling annotation on the lowest BKN/OVC layer, temperature and dewpoint in °C and °F, altimeter, and the raw METAR string.
+
+TAF output includes: station name + ICAO, validity window in Zulu, each forecast period with time label (FM, BECMG, TEMPO, PROB) and end time, wind shear when present, and the raw TAF string.
 
 When a tool fires, a chip badge appears on the turn card in the dashboard (e.g., `⚙ get_aviation_weather`).
 
