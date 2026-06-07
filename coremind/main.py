@@ -10,6 +10,7 @@ from rich.console import Console
 
 from coremind.config import load_settings
 
+logger = logging.getLogger(__name__)
 console = Console()
 app = typer.Typer(
     name="coremind",
@@ -19,10 +20,12 @@ app = typer.Typer(
 audio_app = typer.Typer(help="Audio device diagnostics and testing.")
 chat_app = typer.Typer(help="Voice interaction commands.")
 music_app = typer.Typer(help="Music library management.")
+atc_app = typer.Typer(help="ATC stream catalog management.")
 
 app.add_typer(audio_app, name="audio")
 app.add_typer(chat_app, name="chat")
 app.add_typer(music_app, name="music")
+app.add_typer(atc_app, name="atc")
 
 _settings = None
 _config_path: str = "config.yaml"
@@ -460,6 +463,7 @@ def run() -> None:
                 run_node_mcp_server(
                     music_dir=settings.node_mcp.music_dir,
                     catalog_path=settings.node_mcp.catalog_path,
+                    atc_catalog_path=settings.node_mcp.atc_catalog_path,
                     port=settings.node_mcp.port,
                 )
             )
@@ -835,6 +839,142 @@ def music_scan() -> None:
         f"  Tracks:  {len(data['tracks'])}\n"
         f"  Artists: {len(data['artists'])}\n"
         f"  Albums:  {len(data['albums'])}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# ATC commands
+# ---------------------------------------------------------------------------
+
+_ATC_SUFFIXES = [
+    "twr", "gnd", "app", "app_n", "app_s", "dep", "del",
+    "atis", "ramp", "unicom", "ctaf",
+]
+
+_SUFFIX_NAMES = {
+    "twr": "Tower", "gnd": "Ground", "app": "Approach",
+    "app_n": "Approach North", "app_s": "Approach South",
+    "dep": "Departure", "del": "Delivery", "atis": "ATIS",
+    "ramp": "Ramp", "unicom": "Unicom", "ctaf": "CTAF",
+}
+
+
+@atc_app.command("scan")
+def atc_scan(
+    icaos: list[str] = typer.Argument(..., help="ICAO codes to scan, e.g. KEWR KJFK KIAD"),
+    airport_names: str = typer.Option("", "--names", help="Comma-separated airport names matching ICAO order"),
+    rate: float = typer.Option(1.0, "--rate", "-r", help="Requests per second (default: 1.0)"),
+) -> None:
+    """Probe LiveATC.net for standard ATC streams and add them to the catalog.
+
+    Use 'coremind atc add' for airports with non-standard (obfuscated) mount names.
+    """
+    import time
+
+    import httpx
+
+    from coremind.node_mcp.atc_catalog import (
+        ATCCatalog,
+        empty_catalog,
+        load_atc_catalog,
+        save_atc_catalog,
+    )
+
+    settings = _get_settings()
+    catalog_path = Path(settings.node_mcp.atc_catalog_path).expanduser()
+
+    data = load_atc_catalog(catalog_path) or empty_catalog()
+    catalog = ATCCatalog(data)
+
+    name_list = [n.strip() for n in airport_names.split(",") if n.strip()]
+    delay = 1.0 / max(rate, 0.1)
+
+    total_new = 0
+    for i, icao in enumerate(icaos):
+        icao = icao.upper().strip()
+        airport_name = name_list[i] if i < len(name_list) else ""
+        console.print(f"\n[bold]{icao}[/bold]{' — ' + airport_name if airport_name else ''}")
+
+        for suffix in _ATC_SUFFIXES:
+            mount = f"{icao.lower()}_{suffix}"
+            pls_url = f"https://www.liveatc.net/play/{mount}.pls"
+            try:
+                r = httpx.get(pls_url, timeout=8.0, follow_redirects=True)
+                valid = r.status_code == 200 and r.text.strip().startswith("[playlist]")
+            except Exception:
+                valid = False
+
+            if valid:
+                # Parse Title1= from .pls for a human-readable name
+                name = _SUFFIX_NAMES.get(suffix, suffix.upper())
+                for line in r.text.splitlines():
+                    if line.startswith("Title1="):
+                        raw = line.split("=", 1)[1].strip()
+                        if raw:
+                            name = raw
+                        break
+
+                channel: dict = {
+                    "airport": icao,
+                    "airport_name": airport_name,
+                    "name": name,
+                    "mount": mount,
+                }
+                is_new = catalog.upsert_channel(channel)
+                if is_new:
+                    total_new += 1
+                console.print(f"  [green]✓[/green]  {mount}  {name}")
+            else:
+                console.print(f"  [dim]✗  {mount}[/dim]")
+
+            time.sleep(delay)
+
+    save_atc_catalog(catalog.to_dict(), catalog_path)
+    console.print(
+        f"\n[green]Catalog saved:[/green] {catalog_path}\n"
+        f"  {total_new} new channel(s) added."
+    )
+
+
+@atc_app.command("add")
+def atc_add(
+    icao: str = typer.Argument(..., help="Airport ICAO code, e.g. KIAD"),
+    name: str = typer.Argument(..., help="Channel name, e.g. 'Tower'"),
+    mount: str = typer.Argument(..., help="LiveATC mount name, e.g. kiad1_twr_1c19c_120250"),
+    freq: str = typer.Option("", "--freq", "-f", help="Frequency in MHz, e.g. 120.250"),
+    airport_name: str = typer.Option("", "--airport-name", "-a", help="Full airport name, e.g. 'Washington Dulles'"),
+) -> None:
+    """Manually add or update an ATC channel (for airports with non-standard mounts)."""
+    from coremind.node_mcp.atc_catalog import (
+        ATCCatalog,
+        empty_catalog,
+        load_atc_catalog,
+        save_atc_catalog,
+    )
+
+    settings = _get_settings()
+    catalog_path = Path(settings.node_mcp.atc_catalog_path).expanduser()
+
+    data = load_atc_catalog(catalog_path) or empty_catalog()
+    catalog = ATCCatalog(data)
+
+    channel: dict = {
+        "airport": icao.upper().strip(),
+        "airport_name": airport_name.strip(),
+        "name": name.strip(),
+        "mount": mount.strip(),
+    }
+    if freq.strip():
+        channel["freq"] = freq.strip()
+
+    is_new = catalog.upsert_channel(channel)
+    save_atc_catalog(catalog.to_dict(), catalog_path)
+
+    action = "Added" if is_new else "Updated"
+    freq_str = f" ({freq} MHz)" if freq.strip() else ""
+    console.print(
+        f"[green]{action}:[/green] {channel['airport']} {name}{freq_str}  →  {mount}\n"
+        f"  Catalog: {catalog_path}"
     )
 
 

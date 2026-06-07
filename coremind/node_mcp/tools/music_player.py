@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import os
-import signal
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from coremind.node_mcp import playback
+
 if TYPE_CHECKING:
     from coremind.node_mcp.catalog import MusicCatalog
 
-_current_process: subprocess.Popen | None = None
 _music_dir: Path = Path.home() / "Music"
 _catalog: MusicCatalog | None = None
 _catalog_path: Path = Path.home() / ".coremind" / "music-catalog.json"
@@ -28,15 +26,9 @@ def init_catalog(music_dir: Path, catalog_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def play_track(path: str) -> str:
-    """Stop any current playback and start mpv with the given file path."""
-    global _current_process
-    stop_playback()
+    """Stop any current playback and play a single file via mpv."""
     try:
-        _current_process = subprocess.Popen(
-            ["mpv", "--no-terminal", "--quiet", path],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        playback.start(["mpv", "--no-terminal", "--quiet", path])
     except FileNotFoundError:
         return "mpv is not installed. Run: sudo apt install mpv"
     return f"Now playing: {Path(path).name}"
@@ -44,10 +36,8 @@ def play_track(path: str) -> str:
 
 def play_queue(paths: list[str], shuffle: bool = False) -> str:
     """Write a temp M3U and start mpv with --playlist for multi-track playback."""
-    global _current_process
     if not paths:
         return "No tracks to play."
-    stop_playback()
     with tempfile.NamedTemporaryFile(
         suffix=".m3u", delete=False, mode="w", prefix="coremind_"
     ) as f:
@@ -57,9 +47,7 @@ def play_queue(paths: list[str], shuffle: bool = False) -> str:
     if shuffle:
         cmd.append("--shuffle")
     try:
-        _current_process = subprocess.Popen(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        playback.start(cmd)
     except FileNotFoundError:
         return "mpv is not installed. Run: sudo apt install mpv"
     label = f"{len(paths)} track(s)"
@@ -67,36 +55,18 @@ def play_queue(paths: list[str], shuffle: bool = False) -> str:
 
 
 def stop_playback() -> str:
-    """Terminate the current mpv process if one is running."""
-    global _current_process
-    if _current_process is not None and _current_process.poll() is None:
-        _current_process.terminate()
-        try:
-            _current_process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            _current_process.kill()
-        _current_process = None
-        return "Playback stopped."
-    _current_process = None
-    return "Nothing was playing."
+    """Stop currently playing audio."""
+    return playback.stop_current()
 
 
 def pause_mpv() -> None:
-    """Suspend mpv with SIGSTOP so mic captures only the user's voice."""
-    if _current_process is not None and _current_process.poll() is None:
-        try:
-            os.kill(_current_process.pid, signal.SIGSTOP)
-        except ProcessLookupError:
-            pass
+    """Suspend audio with SIGSTOP for mic isolation during voice turns."""
+    playback.pause()
 
 
 def resume_mpv() -> None:
-    """Resume a SIGSTOP-suspended mpv process after the voice turn ends."""
-    if _current_process is not None and _current_process.poll() is None:
-        try:
-            os.kill(_current_process.pid, signal.SIGCONT)
-        except ProcessLookupError:
-            pass
+    """Resume audio with SIGCONT after voice turn ends."""
+    playback.resume()
 
 
 # ---------------------------------------------------------------------------

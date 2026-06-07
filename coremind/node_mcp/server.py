@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 def create_node_mcp_server(
     music_dir: str = "~/Music",
     catalog_path: str = "~/.coremind/music-catalog.json",
+    atc_catalog_path: str = "~/.coremind/atc-catalog.json",
 ):
     """Build and return a FastMCP server exposing Node-local capabilities."""
     try:
@@ -19,13 +20,15 @@ def create_node_mcp_server(
             "Install with: pip install 'coremind[tools]'"
         ) from exc
 
-    from coremind.node_mcp.tools import music_player, volume_control
+    from coremind.node_mcp.tools import atc_player, music_player, volume_control
 
     _music_dir = Path(music_dir).expanduser()
     _catalog_path = Path(catalog_path).expanduser()
+    _atc_catalog_path = Path(atc_catalog_path).expanduser()
 
     music_player._music_dir = _music_dir
     music_player.init_catalog(_music_dir, _catalog_path)
+    atc_player.init_atc_catalog(_atc_catalog_path)
 
     mcp = FastMCP("CoreMind Node")
 
@@ -108,15 +111,38 @@ def create_node_mcp_server(
         """Remove one or more track paths from a playlist."""
         return music_player.remove_from_playlist(playlist, tracks)
 
+    # --- ATC tools ---
+
+    @mcp.tool()
+    def play_atc(query: str) -> str:
+        """Stream a live ATC feed. Say the airport and channel type, e.g. 'KEWR tower' or 'Newark approach'."""
+        return atc_player.play_atc(query)
+
+    @mcp.tool()
+    def list_atc_airports() -> str:
+        """List all airports with ATC streams available in the catalog."""
+        return atc_player.list_atc_airports()
+
+    @mcp.tool()
+    def list_atc_channels(airport: str) -> str:
+        """List all ATC channels for a specific airport (e.g. 'KEWR' or 'Newark')."""
+        return atc_player.list_atc_channels(airport)
+
+    @mcp.tool()
+    def stop_atc() -> str:
+        """Stop the currently streaming ATC audio."""
+        return atc_player.stop_atc()
+
     return mcp
 
 
 async def run_node_mcp_server(
     music_dir: str = "~/Music",
     catalog_path: str = "~/.coremind/music-catalog.json",
+    atc_catalog_path: str = "~/.coremind/atc-catalog.json",
     port: int = 8767,
 ) -> None:
     """Start the Node MCP SSE server. Blocks until cancelled."""
-    mcp = create_node_mcp_server(music_dir, catalog_path)
+    mcp = create_node_mcp_server(music_dir, catalog_path, atc_catalog_path)
     logger.info("Node MCP server listening on port %d", port)
     await mcp.run_sse_async(host="0.0.0.0", port=port)

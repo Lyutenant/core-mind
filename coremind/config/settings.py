@@ -133,6 +133,7 @@ class NodeMCPConfig(BaseModel):
     port: int = 8767
     music_dir: str = "~/Music"
     catalog_path: str = "~/.coremind/music-catalog.json"
+    atc_catalog_path: str = "~/.coremind/atc-catalog.json"
 
 
 class Settings(BaseSettings):

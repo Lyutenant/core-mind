@@ -46,6 +46,7 @@ A two-component voice assistant system built around a Raspberry Pi and a Mac Min
   - [Built-in Tools](#built-in-tools)
   - [MCP Servers](#mcp-servers)
   - [Voice-Controlled Music Player](#voice-controlled-music-player)
+  - [Live ATC Streaming](#live-atc-streaming)
 - [Persistent Service — systemd](#persistent-service--systemd)
 - [All-on-Pi Mode (No Hub)](#all-on-pi-mode-no-hub)
 - [Updating](#updating)
@@ -459,7 +460,7 @@ tools:
 
 ### Voice-Controlled Music Player
 
-The Pi runs a local MCP server (port 8767) that exposes 13 music tools. The Hub's LLM calls these over Tailscale just like any other tool.
+The Pi runs a local MCP server (port 8767) that exposes 17 tools (13 music + 4 ATC). The Hub's LLM calls these over Tailscale just like any other tool.
 
 **Pi setup:**
 ```bash
@@ -530,7 +531,56 @@ Playlists are persisted in the catalog JSON immediately and survive Node restart
 
 **Mic isolation during playback**
 
-When music is playing and the wake word fires, CoreMind suspends mpv (`SIGSTOP`) before recording starts so only your voice reaches the mic. After the response is spoken, mpv resumes (`SIGCONT`) from exactly where it paused — no gap, no restart. A `try/finally` guarantees resume even on errors or timeouts.
+When music is playing and the wake word fires, CoreMind suspends mpv (`SIGSTOP`) before recording starts so only your voice reaches the mic. After the response is spoken, mpv resumes (`SIGCONT`) from exactly where it paused — no gap, no restart. A `try/finally` guarantees resume even on errors or timeouts. This covers both music and ATC streams since they share one mpv process slot.
+
+---
+
+### Live ATC Streaming
+
+Stream live ATC audio from [LiveATC.net](https://www.liveatc.net) by voice command. The same mic isolation that applies to music works here too — ATC is suspended during voice turns and resumed after the response.
+
+**Build the ATC catalog**
+
+Most airports use standard LiveATC mount names that can be auto-discovered:
+
+```bash
+coremind atc scan KEWR KJFK KLGA KDCA KJYO
+# ✓  kewr_twr  Newark Liberty Tower
+# ✓  kewr_gnd  Newark Liberty Ground
+# ✓  kewr_app  Newark Liberty Approach
+# ...
+```
+
+Some busy airports (KIAD, KATL, KJFK towers) use obfuscated mounts that can't be guessed. Add those manually:
+
+```bash
+coremind atc add KIAD "Tower" kiad1_twr_1c19c_120250 \
+  --freq 120.250 --airport-name "Washington Dulles"
+```
+
+The catalog is saved to `~/.coremind/atc-catalog.json`. Re-run `atc scan` whenever you want to add more airports.
+
+**Node `config.yaml`:**
+```yaml
+node_mcp:
+  enabled: true
+  atc_catalog_path: ~/.coremind/atc-catalog.json
+```
+
+**Available tools (4):**
+
+| Tool | Voice example |
+|------|--------------|
+| `play_atc` | "Play Newark tower" / "Stream KEWR approach" / "Put on Dulles ground" |
+| `list_atc_airports` | "What airports do you have ATC for?" |
+| `list_atc_channels` | "What ATC channels do you have for Newark?" |
+| `stop_atc` | "Stop the ATC" |
+
+**Obfuscated mount lookup**
+
+Standard airports: `{ICAO}_{suffix}` — can be found by `atc scan`.
+
+Complex airports use random-looking tokens (e.g. `kiad1_twr_1c19c_120250`). To find these, open the LiveATC page for the airport in a browser, open DevTools → Network, press Play on a stream, and copy the stream URL. Extract the path component after `d.liveatc.net/` — that is the mount name.
 
 ---
 
@@ -651,6 +701,10 @@ coremind chat once                      # single push-to-talk turn
 # Music library (Node)
 coremind music scan                     # scan music_dir and rebuild catalog
 
+# ATC streams (Node)
+coremind atc scan KEWR KJFK KLGA       # auto-discover standard LiveATC mounts
+coremind atc add KIAD "Tower" kiad1_twr_1c19c_120250 --freq 120.250  # manual entry
+
 # Diagnostics — any device
 coremind doctor                         # check Python, config, audio, Ollama, STT, TTS, disk
 
@@ -700,9 +754,11 @@ coremind/
   server/         CoreMind Hub — FastAPI server + web dashboard
   tools/          Tool dispatcher, built-in tools, Hub MCP client
     built_in/     get_current_time, get_weather, get_aviation_weather
-  node_mcp/       Node MCP server — exposes Pi capabilities to Hub
+  node_mcp/       Node MCP server — exposes Pi capabilities to Hub (17 tools)
+    playback.py   Shared mpv process (music + ATC mutual exclusion)
     catalog.py    Music catalog (scan, search, playlist CRUD)
-    tools/        music_player, volume_control
+    atc_catalog.py ATC stream catalog (scoring-based channel search)
+    tools/        music_player, atc_player, volume_control
 ```
 
 ---
@@ -730,3 +786,4 @@ coremind/
 | 15 | Mobile-responsive dashboard (iPhone + Tailscale) | ✓ |
 | 16 | Follow-up loop safety (stop phrases, min-word filter, cooldown) | ✓ |
 | 34 | Music catalog (artist/album/playlist browse + voice CRUD) | ✓ |
+| 35 | Live ATC streaming (LiveATC.net; auto-discovery + manual catalog; 4 MCP tools) | ✓ |
