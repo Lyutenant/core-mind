@@ -1334,15 +1334,15 @@ function handleEvent(ev) {
       document.getElementById('conversation-log').innerHTML = '';
       break;
     case 'node_connected':
-      if (currentView === 'nodes') loadNodes();
-      else toast(`Node connected: ${ev.name}`, 'success');
+      loadNodes();
+      if (currentView !== 'nodes') toast(`Node connected: ${ev.name}`, 'success');
       break;
     case 'node_offline':
-      if (currentView === 'nodes') loadNodes();
-      else toast(`Node offline`, '');
+      loadNodes();
+      if (currentView !== 'nodes') toast(`Node offline`, '');
       break;
     case 'node_config_changed':
-      if (currentView === 'nodes') loadNodes();
+      loadNodes();
       break;
   }
 }
@@ -1652,6 +1652,7 @@ document.addEventListener('DOMContentLoaded', () => {
   connectSSE();
   refreshHealth();
   loadConversation();
+  loadNodes();
   setInterval(refreshHealth, 30000);
 });
 </script>
