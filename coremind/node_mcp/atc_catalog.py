@@ -79,14 +79,24 @@ class ATCCatalog:
 
     def find_channel(self, query: str) -> dict | None:
         """Return the best-matching channel for a natural-language query, or None."""
+        candidates = self.find_candidates(query)
+        return candidates[0] if len(candidates) == 1 else (candidates[0] if candidates else None)
+
+    def find_candidates(self, query: str) -> list[dict]:
+        """Return all channels tied at the top score (used for disambiguation).
+
+        Returns an empty list if no channel scores > 0.
+        If multiple channels share the highest score, all are returned so the
+        caller can ask the user to pick one.
+        """
         results = self._score_all(query)
         if not results:
-            return None
+            return []
         results.sort(key=lambda x: x[1], reverse=True)
         best_score = results[0][1]
         if best_score == 0:
-            return None
-        return results[0][0]
+            return []
+        return [ch for ch, s in results if s == best_score]
 
     def search(self, query: str) -> list[dict]:
         """Return all channels with a positive score, ranked best-first."""

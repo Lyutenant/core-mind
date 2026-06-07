@@ -174,6 +174,56 @@ class TestFindChannel:
 
 
 # ---------------------------------------------------------------------------
+# find_candidates (disambiguation support)
+# ---------------------------------------------------------------------------
+
+
+class TestFindCandidates:
+    def test_single_best_match_returns_one(self, catalog):
+        # "KEWR tower" — only one tower at KEWR, should return exactly one
+        candidates = catalog.find_candidates("KEWR tower")
+        assert len(candidates) == 1
+        assert candidates[0]["mount"] == "kewr_twr"
+
+    def test_tied_channels_returned(self):
+        # Two KIAD tower channels with identical names — both should be candidates
+        multi_catalog = ATCCatalog({
+            "channels": [
+                {"airport": "KIAD", "airport_name": "Washington Dulles", "name": "Tower Runway 1C/19C", "mount": "kiad1_twr_1c19c", "freq": "120.250"},
+                {"airport": "KIAD", "airport_name": "Washington Dulles", "name": "Tower Runway 1R/19L", "mount": "kiad1_twr_1r19l", "freq": "119.850"},
+                {"airport": "KIAD", "airport_name": "Washington Dulles", "name": "Ground", "mount": "kiad_gnd", "freq": "121.900"},
+            ]
+        })
+        # "Dulles tower" — both tower channels tie; ground does not
+        candidates = multi_catalog.find_candidates("Dulles tower")
+        mounts = {ch["mount"] for ch in candidates}
+        assert "kiad1_twr_1c19c" in mounts
+        assert "kiad1_twr_1r19l" in mounts
+        assert "kiad_gnd" not in mounts
+
+    def test_channel_name_breaks_tie_on_second_query(self):
+        # After disambiguation, user's more specific query picks the right channel
+        multi_catalog = ATCCatalog({
+            "channels": [
+                {"airport": "KIAD", "airport_name": "Washington Dulles", "name": "Tower Runway 1C/19C", "mount": "kiad1_twr_1c19c", "freq": "120.250"},
+                {"airport": "KIAD", "airport_name": "Washington Dulles", "name": "Tower Runway 1R/19L", "mount": "kiad1_twr_1r19l", "freq": "119.850"},
+            ]
+        })
+        # LLM re-queries with "KIAD Tower Runway 1C/19C"
+        candidates = multi_catalog.find_candidates("KIAD Tower Runway 1C 19C")
+        assert len(candidates) == 1
+        assert candidates[0]["mount"] == "kiad1_twr_1c19c"
+
+    def test_no_match_returns_empty(self, catalog):
+        candidates = catalog.find_candidates("Timbuktu ATIS")
+        assert candidates == []
+
+    def test_zero_score_returns_empty(self, catalog):
+        candidates = catalog.find_candidates("xyz xyz xyz")
+        assert candidates == []
+
+
+# ---------------------------------------------------------------------------
 # Search
 # ---------------------------------------------------------------------------
 

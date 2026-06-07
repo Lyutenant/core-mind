@@ -41,14 +41,19 @@ def _no_catalog_msg() -> str:
 
 
 def play_atc(query: str) -> str:
-    """Find the best-matching ATC channel and stream it live via mpv."""
+    """Find the best-matching ATC channel and stream it.
+
+    If multiple channels tie on score, returns a disambiguation list so the
+    LLM can ask the user to pick one and call play_atc again with a more
+    specific query.
+    """
     if _catalog is None or not _catalog._channels:
         return _no_catalog_msg()
 
     from coremind.node_mcp.atc_catalog import stream_url
-    ch = _catalog.find_channel(query)
-    if ch is None:
-        # Fall back to listing what we have
+    candidates = _catalog.find_candidates(query)
+
+    if not candidates:
         airports = _catalog.list_airports()
         airport_list = ", ".join(airports[:8]) or "none"
         return (
@@ -57,6 +62,30 @@ def play_atc(query: str) -> str:
             "Try 'list ATC airports' for the full list."
         )
 
+    if len(candidates) > 5:
+        # Query too vague — give a hint rather than a wall of options
+        airport_hint = candidates[0].get("airport_name") or candidates[0].get("airport", "")
+        return (
+            f"'{query}' matched {len(candidates)} channels for {airport_hint}. "
+            "Try adding a channel type — for example 'tower', 'ground', or 'approach'."
+        )
+
+    if len(candidates) > 1:
+        # Disambiguate: list the tied options
+        airport_name = (
+            candidates[0].get("airport_name")
+            or candidates[0].get("airport", "")
+        )
+        lines = [f"Multiple channels found for {airport_name}:"]
+        for ch in candidates:
+            name = ch.get("name", ch["mount"])
+            freq = f" ({ch['freq']} MHz)" if ch.get("freq") else ""
+            lines.append(f"- {name}{freq}")
+        lines.append("Which would you like?")
+        return "\n".join(lines)
+
+    # Single unambiguous match — stream it
+    ch = candidates[0]
     url = stream_url(ch["mount"])
     label = f"{ch.get('airport', '')} {ch.get('name', ch['mount'])}"
     if ch.get("freq"):

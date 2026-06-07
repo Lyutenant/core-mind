@@ -537,11 +537,25 @@ When music is playing and the wake word fires, CoreMind suspends mpv (`SIGSTOP`)
 
 ### Live ATC Streaming
 
-Stream live ATC audio from [LiveATC.net](https://www.liveatc.net) by voice command. The same mic isolation that applies to music works here too — ATC is suspended during voice turns and resumed after the response.
+Stream live ATC audio by voice command. The same mic isolation that applies to music works here too — ATC is suspended during voice turns and resumed after the response.
+
+**Disambiguation**
+
+When multiple channels match a query (e.g. an airport with several tower frequencies), CoreMind asks you to pick:
+
+```
+You: Stream ATC from Dulles
+CoreMind: Multiple tower frequencies found for Washington Dulles:
+          - Tower Runway 1C/19C (120.250 MHz)
+          - Tower Runway 1R/19L (119.850 MHz)
+          Which would you like?
+You: Runway 1C and 19C
+CoreMind: Streaming KIAD Tower Runway 1C/19C (120.250 MHz).
+```
 
 **Build the ATC catalog**
 
-Most airports use standard LiveATC mount names that can be auto-discovered:
+Most airports use standard mount names that can be auto-discovered:
 
 ```bash
 coremind atc scan KEWR KJFK KLGA KDCA KJYO
@@ -551,11 +565,13 @@ coremind atc scan KEWR KJFK KLGA KDCA KJYO
 # ...
 ```
 
-Some busy airports (KIAD, KATL, KJFK towers) use obfuscated mounts that can't be guessed. Add those manually:
+Some busy airports use obfuscated mount names that can't be guessed. Add those manually with a descriptive channel name so disambiguation works:
 
 ```bash
-coremind atc add KIAD "Tower" kiad1_twr_1c19c_120250 \
+coremind atc add KIAD "Tower Runway 1C/19C" kiad1_twr_1c19c_120250 \
   --freq 120.250 --airport-name "Washington Dulles"
+coremind atc add KIAD "Tower Runway 1R/19L" kiad1_twr_1r19l_119850 \
+  --freq 119.850 --airport-name "Washington Dulles"
 ```
 
 The catalog is saved to `~/.coremind/atc-catalog.json`. Re-run `atc scan` whenever you want to add more airports.
@@ -576,11 +592,11 @@ node_mcp:
 | `list_atc_channels` | "What ATC channels do you have for Newark?" |
 | `stop_atc` | "Stop the ATC" |
 
-**Obfuscated mount lookup**
+**Finding obfuscated mount names**
 
-Standard airports: `{ICAO}_{suffix}` — can be found by `atc scan`.
+Standard airports: `{ICAO}_{suffix}` — discoverable with `atc scan`.
 
-Complex airports use random-looking tokens (e.g. `kiad1_twr_1c19c_120250`). To find these, open the LiveATC page for the airport in a browser, open DevTools → Network, press Play on a stream, and copy the stream URL. Extract the path component after `d.liveatc.net/` — that is the mount name.
+For complex airports, use your browser's DevTools: open the streaming page, go to the Network tab, press Play on the desired channel, and look for an audio stream request. The path component of that URL is the mount name. Use a descriptive channel name (e.g. `"Tower Runway 1C/19C"`) so CoreMind can disambiguate it by voice.
 
 ---
 
@@ -702,7 +718,7 @@ coremind chat once                      # single push-to-talk turn
 coremind music scan                     # scan music_dir and rebuild catalog
 
 # ATC streams (Node)
-coremind atc scan KEWR KJFK KLGA       # auto-discover standard LiveATC mounts
+coremind atc scan KEWR KJFK KLGA       # auto-discover standard ATC mounts
 coremind atc add KIAD "Tower" kiad1_twr_1c19c_120250 --freq 120.250  # manual entry
 
 # Diagnostics — any device
@@ -786,4 +802,4 @@ coremind/
 | 15 | Mobile-responsive dashboard (iPhone + Tailscale) | ✓ |
 | 16 | Follow-up loop safety (stop phrases, min-word filter, cooldown) | ✓ |
 | 34 | Music catalog (artist/album/playlist browse + voice CRUD) | ✓ |
-| 35 | Live ATC streaming (LiveATC.net; auto-discovery + manual catalog; 4 MCP tools) | ✓ |
+| 35 | Live ATC streaming (auto-discovery + manual catalog; disambiguation; 4 MCP tools) | ✓ |
