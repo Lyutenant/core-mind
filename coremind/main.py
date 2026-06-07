@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -317,6 +318,7 @@ def _build_voice_loop(settings, *, enable_wake_word: bool = False, enable_vad: b
         follow_up_seconds=settings.runtime.follow_up_seconds,
         follow_up_min_words=settings.runtime.follow_up_min_words,
         post_response_cooldown_seconds=settings.runtime.post_response_cooldown_seconds,
+        config_mtime=Path(_config_path).stat().st_mtime if Path(_config_path).exists() else 0.0,
     )
 
 

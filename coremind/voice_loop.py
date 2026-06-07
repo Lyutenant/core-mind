@@ -79,6 +79,7 @@ class VoiceLoop:
         follow_up_seconds: float = 0.0,
         follow_up_min_words: int = 2,
         post_response_cooldown_seconds: float = 1.0,
+        config_mtime: float = 0.0,
     ) -> None:
         self._name = name
         self._recorder = recorder
@@ -101,6 +102,12 @@ class VoiceLoop:
         self._follow_up_min_words = follow_up_min_words
         self._post_response_cooldown = post_response_cooldown_seconds
         self._session_id = str(uuid.uuid4())
+        # ISO timestamp of the config file at startup — sent to Hub on registration
+        # so both sides can agree on which config is newer.
+        from datetime import datetime, timezone
+        self._config_mtime_iso = datetime.fromtimestamp(
+            config_mtime if config_mtime > 0 else 0.0, tz=timezone.utc
+        ).isoformat()
 
         # Node registration — only active when running in remote (node) mode
         if self._remote_url:
@@ -147,11 +154,33 @@ class VoiceLoop:
             except Exception as e:
                 logger.debug("Config poll failed: %s", e)
 
+    def _build_config_snapshot(self) -> dict:
+        """Current values of all Hub-overrideable settings, sent on registration."""
+        snap: dict = {
+            "vad_silence_seconds": self._vad_silence_seconds,
+            "vad_max_record_seconds": self._vad_max_record_seconds,
+            "vad_min_speech_seconds": self._vad_min_speech_seconds,
+            "follow_up_seconds": self._follow_up_seconds,
+            "follow_up_min_words": self._follow_up_min_words,
+            "post_response_cooldown_seconds": self._post_response_cooldown,
+        }
+        if self._wake_word is not None and hasattr(self._wake_word, "_threshold"):
+            snap["wake_word_threshold"] = self._wake_word._threshold
+        if self._vad is not None and hasattr(self._vad, "threshold"):
+            snap["vad_energy_threshold"] = self._vad.threshold
+        return snap
+
     def _hub_register(self, httpx, base: str, node_id: str, name: str, hostname: str) -> None:
         try:
             r = httpx.post(
                 f"{base}/v1/nodes/register",
-                json={"node_id": node_id, "name": name, "hostname": hostname},
+                json={
+                    "node_id": node_id,
+                    "name": name,
+                    "hostname": hostname,
+                    "config_timestamp": self._config_mtime_iso,
+                    "config_snapshot": self._build_config_snapshot(),
+                },
                 timeout=10.0,
             )
             if r.status_code == 200:

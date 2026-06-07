@@ -30,6 +30,32 @@ _event_listeners: list[asyncio.Queue] = []
 _turn_count: int = 0
 _node_registry: dict[str, dict] = {}   # node_id → {name, hostname, online, last_seen, config_overrides}
 
+# ---------------------------------------------------------------------------
+# Node override persistence  (~/.coremind/node-overrides.json on the Hub)
+# ---------------------------------------------------------------------------
+
+_OVERRIDES_PATH = Path.home() / ".coremind" / "node-overrides.json"
+
+
+def _load_node_overrides() -> dict:
+    try:
+        if _OVERRIDES_PATH.exists():
+            return json.loads(_OVERRIDES_PATH.read_text())
+    except Exception as exc:
+        logger.warning("Could not load node overrides: %s", exc)
+    return {}
+
+
+def _save_node_overrides(data: dict) -> None:
+    try:
+        _OVERRIDES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _OVERRIDES_PATH.write_text(json.dumps(data, indent=2))
+    except Exception as exc:
+        logger.warning("Could not save node overrides: %s", exc)
+
+
+_persisted_overrides: dict = _load_node_overrides()
+
 def _build_system_prompt(s) -> str:
     parts = [
         f"You are {s.app.name}, a voice assistant running on a Raspberry Pi.",
@@ -373,8 +399,50 @@ try:
             raise HTTPException(status_code=400, detail="node_id required")
         name = data.get("name", "Node")
         hostname = data.get("hostname", "unknown")
+        node_config_ts_str: str | None = data.get("config_timestamp")
+        config_snapshot: dict = data.get("config_snapshot", {})
+
         now = datetime.datetime.utcnow()
         existing = _node_registry.get(node_id, {})
+
+        # Determine active overrides, seeding from disk if this is a fresh start.
+        hub_record = _persisted_overrides.get(node_id, {})
+        active_overrides: dict = existing.get("config_overrides") or hub_record.get("overrides", {})
+
+        # Timestamp contest: whichever side was updated more recently wins.
+        if node_config_ts_str and config_snapshot:
+            try:
+                node_ts = datetime.datetime.fromisoformat(node_config_ts_str)
+                hub_ts_str = hub_record.get("updated_at")
+                if hub_ts_str:
+                    hub_ts = datetime.datetime.fromisoformat(hub_ts_str)
+                    # Normalise both to UTC-aware for a safe comparison.
+                    if node_ts.tzinfo is None:
+                        node_ts = node_ts.replace(tzinfo=datetime.timezone.utc)
+                    if hub_ts.tzinfo is None:
+                        hub_ts = hub_ts.replace(tzinfo=datetime.timezone.utc)
+                    node_wins = node_ts > hub_ts
+                else:
+                    node_wins = True  # no Hub record yet → Node's config.yaml is the authority
+                if node_wins:
+                    active_overrides = config_snapshot
+                    _persisted_overrides[node_id] = {
+                        "updated_at": node_config_ts_str,
+                        "overrides": config_snapshot,
+                    }
+                    _save_node_overrides(_persisted_overrides)
+                    logger.info(
+                        "Node %s config.yaml (%s) is newer than Hub override (%s) — adopted",
+                        node_id[:8], node_config_ts_str, hub_ts_str,
+                    )
+                else:
+                    logger.debug(
+                        "Hub override (%s) is newer than Node config.yaml (%s) — keeping Hub values",
+                        hub_ts_str, node_config_ts_str,
+                    )
+            except Exception as exc:
+                logger.debug("Timestamp comparison failed during registration: %s", exc)
+
         _node_registry[node_id] = {
             "node_id": node_id,
             "name": name,
@@ -382,11 +450,11 @@ try:
             "online": True,
             "registered_at": existing.get("registered_at", now),
             "last_seen": now,
-            "config_overrides": existing.get("config_overrides", {}),
+            "config_overrides": active_overrides,
         }
         _broadcast({"type": "node_connected", "node_id": node_id, "name": name, "hostname": hostname})
         logger.info("Node registered: %s (%s @ %s)", name, node_id[:8], hostname)
-        return {"status": "registered", "config": _node_registry[node_id]["config_overrides"]}
+        return {"status": "registered", "config": active_overrides}
 
     @app.post("/v1/nodes/{node_id}/heartbeat")
     async def node_heartbeat(node_id: str):
@@ -436,7 +504,10 @@ try:
             "follow_up_seconds", "follow_up_min_words", "post_response_cooldown_seconds",
         }
         overrides = {k: v for k, v in data.items() if k in allowed}
+        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         _node_registry[node_id]["config_overrides"] = overrides
+        _persisted_overrides[node_id] = {"updated_at": now_iso, "overrides": overrides}
+        _save_node_overrides(_persisted_overrides)
         _broadcast({"type": "node_config_changed", "node_id": node_id, "config": overrides})
         return {"status": "saved", "config": overrides}
 
