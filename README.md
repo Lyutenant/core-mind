@@ -597,6 +597,13 @@ coremind chat once                      # single push-to-talk interaction
 # Diagnostics (any device)
 coremind doctor                         # check Python, config, audio, Ollama, STT, TTS, disk
 
+# Node systemd service (Pi)
+systemctl --user status coremind        # show service status
+systemctl --user restart coremind       # restart after config changes
+systemctl --user stop coremind          # stop the service
+journalctl --user -u coremind -f        # follow live logs
+journalctl --user -u coremind -n 50     # last 50 lines
+
 # Development
 pytest                                  # run unit tests (no hardware required)
 ```
