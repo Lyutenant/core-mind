@@ -232,7 +232,7 @@ async def _run_llm_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:
             fn_name = fn.get("name", "")
             fn_args = fn.get("arguments") or {}
             _broadcast({"type": "status", "text": f"Running tool: {fn_name}…"})
-            tool_result = await asyncio.to_thread(dispatcher.execute, fn_name, fn_args)
+            tool_result = await dispatcher.execute_async(fn_name, fn_args)
             _broadcast({"type": "tool_call", "name": fn_name, "args": fn_args, "result": tool_result})
             logger.info("Tool %r → %r", fn_name, tool_result[:120] if tool_result else "")
             conv.append({"role": "tool", "tool_name": fn_name, "content": tool_result})
@@ -272,9 +272,23 @@ try:
                     _broadcast({"type": "node_offline", "node_id": node_id})
                     logger.info("Node %s (%s) marked offline", info["name"], node_id[:8])
 
+    _mcp_manager = None
+
     @app.on_event("startup")
     async def _startup():
+        nonlocal _mcp_manager
         asyncio.create_task(_node_offline_watcher())
+        s = _get_settings()
+        if s.tools.enabled and s.tools.mcp_servers:
+            from coremind.tools.mcp_manager import MCPManager
+            _mcp_manager = MCPManager()
+            await _mcp_manager.start(s.tools.mcp_servers)
+            _get_dispatcher().set_mcp_manager(_mcp_manager)
+
+    @app.on_event("shutdown")
+    async def _shutdown():
+        if _mcp_manager is not None:
+            await _mcp_manager.stop()
 
     # -----------------------------------------------------------------------
     # Static / UI

@@ -61,18 +61,22 @@ memory:
 tools:
   enabled: true
   # Built-in tools available out of the box (no API key needed):
-  #   time    — "What time is it?"
-  #   weather — "What's the weather in Tokyo?" (fetches from wttr.in)
+  #   time             — "What time is it?"
+  #   weather          — "What's the weather in Tokyo?" (fetches from wttr.in)
+  #   aviation_weather — "What's the METAR at Leesburg?" (NOAA aviationweather.gov)
   built_in: [time, weather]
   # Add aviation_weather to built_in to enable METAR/TAF/PIREP queries:
   # built_in: [time, weather, aviation_weather]
-  # mcp_servers:          # Phase B — connect to any MCP-compatible server
-  #   - name: filesystem
+  #
+  # MCP servers — connect to any MCP-compatible server.
+  # Requires: pip install 'coremind[tools]'
+  # mcp_servers:
+  #   - name: filesystem        # stdio transport: spawn a local subprocess
   #     transport: stdio
   #     command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
-  #   - name: node        # Phase C — Pi's local MCP server
+  #   - name: node              # http transport: connect to Pi's Node MCP server
   #     transport: http
-  #     url: http://100.x.x.x:8767
+  #     url: http://100.x.x.x:8767   # replace with Pi's Tailscale IP
 
 remote_brain:
   enabled: false   # Hub does not forward to another Hub

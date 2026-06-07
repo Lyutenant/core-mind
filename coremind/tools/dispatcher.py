@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from coremind.tools.registry import Tool
 
 if TYPE_CHECKING:
-    pass
+    from coremind.tools.mcp_manager import MCPManager
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,10 @@ def _load_built_in_factories() -> dict[str, type[Tool]]:
 class ToolDispatcher:
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
+        self._mcp_manager: MCPManager | None = None
+
+    def set_mcp_manager(self, mcp: MCPManager) -> None:
+        self._mcp_manager = mcp
 
     def register(self, tool: Tool) -> None:
         self._tools[tool.name] = tool
@@ -51,7 +55,20 @@ class ToolDispatcher:
                 self.register(factories[name]())
 
     def get_tool_definitions(self) -> list[dict]:
-        return [t.to_ollama_schema() for t in self._tools.values()]
+        schemas = [t.to_ollama_schema() for t in self._tools.values()]
+        if self._mcp_manager:
+            # MCP schemas are already fetched at startup; retrieve synchronously.
+            schemas.extend(self._mcp_manager._schemas)  # noqa: SLF001
+        return schemas
+
+    async def execute_async(self, tool_name: str, arguments: dict) -> str:
+        """Dispatch a tool call, routing to built-in (sync) or MCP (async) as needed."""
+        if tool_name in self._tools:
+            return self.execute(tool_name, arguments)
+        if self._mcp_manager and tool_name in self._mcp_manager.tool_to_server:
+            return await self._mcp_manager.call_tool(tool_name, arguments)
+        logger.warning("Tool not found: %r", tool_name)
+        return f"Unknown tool: {tool_name}"
 
     def execute(self, tool_name: str, arguments: dict) -> str:
         tool = self._tools.get(tool_name)

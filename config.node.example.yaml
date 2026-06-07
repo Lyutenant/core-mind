@@ -95,3 +95,10 @@ memory:
 openclaw:
   base_url: null
   agent: coremind
+
+# Node MCP server — exposes Pi-local capabilities (music, volume) to the Hub's LLM.
+# Requires: pip install 'coremind[tools]' and sudo apt install mpv
+node_mcp:
+  enabled: false       # set true to expose music/volume tools to the Hub
+  port: 8767
+  music_dir: ~/Music   # directory searched for audio files

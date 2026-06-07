@@ -80,6 +80,8 @@ class VoiceLoop:
         follow_up_min_words: int = 2,
         post_response_cooldown_seconds: float = 1.0,
         config_mtime: float = 0.0,
+        on_listening_start: Callable[[], None] | None = None,
+        on_turn_complete: Callable[[], None] | None = None,
     ) -> None:
         self._name = name
         self._recorder = recorder
@@ -101,6 +103,8 @@ class VoiceLoop:
         self._follow_up_seconds = follow_up_seconds
         self._follow_up_min_words = follow_up_min_words
         self._post_response_cooldown = post_response_cooldown_seconds
+        self._on_listening_start: Callable[[], None] = on_listening_start or (lambda: None)
+        self._on_turn_complete: Callable[[], None] = on_turn_complete or (lambda: None)
         self._session_id = str(uuid.uuid4())
         # ISO timestamp of the config file at startup — sent to Hub on registration
         # so both sides can agree on which config is newer.
@@ -230,35 +234,41 @@ class VoiceLoop:
             self._play_wake_chime()
             self._wake_fn()
 
-        # Step 2: record — VAD stops at natural pause, fixed-duration otherwise
-        if self._vad is not None:
-            self._status("Speak now...")
-            result = self._recorder.record_with_vad(
-                vad=self._vad,
-                silence_seconds=self._vad_silence_seconds,
-                max_record_seconds=self._vad_max_record_seconds,
-                min_speech_seconds=self._vad_min_speech_seconds,
-            )
-            if result is None:
+        # Pause music playback for clean recording (no-op if nothing is playing)
+        self._on_listening_start()
+        try:
+            # Step 2: record — VAD stops at natural pause, fixed-duration otherwise
+            if self._vad is not None:
+                self._status("Speak now...")
+                result = self._recorder.record_with_vad(
+                    vad=self._vad,
+                    silence_seconds=self._vad_silence_seconds,
+                    max_record_seconds=self._vad_max_record_seconds,
+                    min_speech_seconds=self._vad_min_speech_seconds,
+                )
+                if result is None:
+                    return "", ""
+                tmp_path = str(result)
+            else:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    tmp_path = f.name
+                self._recorder.record(seconds=self._record_seconds, output_path=tmp_path)
+                self._status("Recording complete.")
+
+            # Step 3: remote (Mac Mini handles STT + LLM + TTS) or local
+            if self._remote_url:
+                transcript, response = self._run_remote(tmp_path)
+            else:
+                transcript, response = self._process_local_wav(tmp_path)
+
+            if not transcript:
                 return "", ""
-            tmp_path = str(result)
-        else:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                tmp_path = f.name
-            self._recorder.record(seconds=self._record_seconds, output_path=tmp_path)
-            self._status("Recording complete.")
 
-        # Step 3: remote (Mac Mini handles STT + LLM + TTS) or local
-        if self._remote_url:
-            transcript, response = self._run_remote(tmp_path)
-        else:
-            transcript, response = self._process_local_wav(tmp_path)
-
-        if not transcript:
-            return "", ""
-
-        # Step 4: follow-up window — keep conversing without re-triggering wake word
-        return self._follow_up_loop(transcript, response)
+            # Step 4: follow-up window — keep conversing without re-triggering wake word
+            return self._follow_up_loop(transcript, response)
+        finally:
+            # Always resume music, even if an exception occurred
+            self._on_turn_complete()
 
     def _process_local_wav(self, wav_path: str) -> tuple[str, str]:
         """Transcribe + LLM + optional TTS. Deletes wav_path when done."""

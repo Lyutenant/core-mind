@@ -146,7 +146,14 @@ def audio_play_test(
 # Chat commands
 # ---------------------------------------------------------------------------
 
-def _build_voice_loop(settings, *, enable_wake_word: bool = False, enable_vad: bool = False):
+def _build_voice_loop(
+    settings,
+    *,
+    enable_wake_word: bool = False,
+    enable_vad: bool = False,
+    on_listening_start=None,
+    on_turn_complete=None,
+):
     from coremind import ConfigError, STTError, TTSError, WakeWordError
     from coremind.audio_input.recorder import Recorder
     from coremind.audio_output.player import Player
@@ -319,6 +326,8 @@ def _build_voice_loop(settings, *, enable_wake_word: bool = False, enable_vad: b
         follow_up_min_words=settings.runtime.follow_up_min_words,
         post_response_cooldown_seconds=settings.runtime.post_response_cooldown_seconds,
         config_mtime=Path(_config_path).stat().st_mtime if Path(_config_path).exists() else 0.0,
+        on_listening_start=on_listening_start,
+        on_turn_complete=on_turn_complete,
     )
 
 
@@ -435,7 +444,36 @@ def run() -> None:
             "  To run as a standalone assistant: set [bold]mode: standalone[/bold] in config.yaml\n"
             "  Continuing anyway…\n"
         )
-    loop = _build_voice_loop(settings, enable_wake_word=True, enable_vad=True)
+    # Start Node MCP server before building the voice loop so callbacks are ready
+    _on_listening_start = None
+    _on_turn_complete = None
+    if settings.node_mcp.enabled:
+        import asyncio as _asyncio
+        import threading as _threading
+        from coremind.node_mcp.server import run_node_mcp_server
+        from coremind.node_mcp.tools import music_player as _music_player
+
+        def _start_node_mcp() -> None:
+            _asyncio.run(
+                run_node_mcp_server(
+                    music_dir=settings.node_mcp.music_dir,
+                    port=settings.node_mcp.port,
+                )
+            )
+
+        _t = _threading.Thread(target=_start_node_mcp, daemon=True, name="node-mcp")
+        _t.start()
+        logger.info("Node MCP server started on port %d", settings.node_mcp.port)
+        _on_listening_start = _music_player.pause_mpv
+        _on_turn_complete = _music_player.resume_mpv
+
+    loop = _build_voice_loop(
+        settings,
+        enable_wake_word=True,
+        enable_vad=True,
+        on_listening_start=_on_listening_start,
+        on_turn_complete=_on_turn_complete,
+    )
 
     console.print(
         f"[bold green]{settings.app.name} ready.[/bold green] "

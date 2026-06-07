@@ -113,10 +113,25 @@ class RemoteBrainConfig(BaseModel):
     timeout_seconds: float = 90.0
 
 
+class MCPServerConfig(BaseModel):
+    name: str
+    transport: str          # "stdio" | "http"
+    command: Optional[list[str]] = None   # stdio only: command + args to spawn
+    url: Optional[str] = None             # http only: base URL e.g. http://pi:8767
+
+
 class ToolsConfig(BaseModel):
     enabled: bool = True
-    # Which built-in tools to register. Available: "time", "weather".
+    # Which built-in tools to register. Available: "time", "weather", "aviation_weather".
     built_in: list[str] = ["time", "weather"]
+    # External MCP servers to connect to at Hub startup.
+    mcp_servers: list[MCPServerConfig] = []
+
+
+class NodeMCPConfig(BaseModel):
+    enabled: bool = False
+    port: int = 8767
+    music_dir: str = "~/Music"
 
 
 class Settings(BaseSettings):
@@ -145,6 +160,7 @@ class Settings(BaseSettings):
     wake_word: WakeWordConfig = WakeWordConfig()
     remote_brain: RemoteBrainConfig = RemoteBrainConfig()
     tools: ToolsConfig = ToolsConfig()
+    node_mcp: NodeMCPConfig = NodeMCPConfig()
 
 
 def _coerce(val: str) -> object:

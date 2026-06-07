@@ -221,13 +221,13 @@ def test_format_taf_initial_conditions():
     text = _format_taf(SAMPLE_TAF)
     assert "330" in text
     assert "8 knots" in text
-    assert "sky clear" in text
+    assert "sky clear" in text.lower()
 
 
 def test_format_taf_from_group():
     text = _format_taf(SAMPLE_TAF)
     assert "From" in text
-    assert "calm winds" in text
+    assert "calm winds" in text.lower()
 
 
 # ---------------------------------------------------------------------------
