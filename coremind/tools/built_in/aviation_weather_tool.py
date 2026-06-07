@@ -58,17 +58,28 @@ _ICG_INT = {
 # ---------------------------------------------------------------------------
 
 def _wind(wdir: Any, wspd: Any, wgst: Any = None) -> str:
+    dir_str = str(wdir or "0").strip().upper()
     try:
-        spd = int(wspd)
-        dr = int(wdir)
+        spd = int(float(str(wspd or 0)))
     except (TypeError, ValueError):
-        return "wind unknown"
-    if spd == 0:
-        return "calm winds"
-    text = f"wind {dr:03d} at {spd} knots"
+        spd = 0
+
+    if dir_str == "VRB":
+        text = f"wind variable at {spd} knots"
+    else:
+        try:
+            dr = int(float(dir_str))
+        except (TypeError, ValueError):
+            dr = 0
+        if spd == 0 and dr == 0:
+            return "calm winds"
+        text = f"wind {dr:03d} at {spd} knots"
+
     if wgst:
         try:
-            text += f" gusting {int(wgst)} knots"
+            gust = int(float(str(wgst)))
+            if gust > 0:
+                text += f" gusting {gust} knots"
         except (TypeError, ValueError):
             pass
     return text
@@ -94,9 +105,11 @@ def _visibility(vis: Any) -> str:
 
 
 def _sky(clouds: list[dict]) -> str:
+    """Decode cloud layers; annotates the lowest BKN/OVC/VV layer as ceiling."""
     if not clouds:
         return "sky clear"
     layers = []
+    ceiling_found = False
     for c in clouds:
         cover = (c.get("cover") or "").upper()
         base = c.get("base")
@@ -104,7 +117,11 @@ def _sky(clouds: list[dict]) -> str:
         if cover in ("SKC", "CLR", "CAVOK", "NSC", "NCD"):
             return "sky clear"
         if base is not None:
-            layers.append(f"{label} at {int(base):,} feet")
+            if cover in ("BKN", "OVC", "VV", "OVX") and not ceiling_found:
+                layers.append(f"{label} at {int(base):,} feet — ceiling")
+                ceiling_found = True
+            else:
+                layers.append(f"{label} at {int(base):,} feet")
         else:
             layers.append(label)
     return "; ".join(layers) if layers else "sky clear"
@@ -197,31 +214,52 @@ def _fetch_pireps(icao: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _format_metar(obs: dict) -> str:
-    name = obs.get("name", obs.get("icaoId", "unknown"))
+    icao = (obs.get("icaoId") or "").upper()
+    name = obs.get("name", icao)
     flt_cat = obs.get("fltCat", "")
+
+    # Observation time and age
+    obs_time = obs.get("obsTime")
+    time_str = ""
+    if obs_time:
+        try:
+            dt = datetime.datetime.fromtimestamp(int(obs_time), tz=datetime.timezone.utc)
+            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            age_min = max(0, int((now - dt).total_seconds() / 60))
+            zulu = dt.strftime("%H%M")
+            time_str = f"Observed at {zulu} Zulu, {age_min} minute{'s' if age_min != 1 else ''} ago."
+        except Exception:
+            pass
+
     wind = _wind(obs.get("wdir"), obs.get("wspd"), obs.get("wgst"))
     vis = _visibility(obs.get("visib"))
     sky = _sky(obs.get("clouds") or [])
+    wx = (obs.get("wxString") or "").strip()
     temp_c = obs.get("temp")
     dewp_c = obs.get("dewp")
     altim = _altimeter_inhg(obs.get("altim"))
-    wx = obs.get("wxString") or ""
+    raw = (obs.get("rawOb") or "").strip()
 
-    parts = [f"{name}:"]
+    station = f"{name} ({icao})" if icao and icao not in name else name
+    parts = [f"{station}."]
     if flt_cat:
-        parts[0] += f" {flt_cat}."
+        parts.append(f"Flight category: {flt_cat}.")
+    if time_str:
+        parts.append(time_str)
     parts.append(f"{wind.capitalize()}.")
     if vis:
         parts.append(f"{vis.capitalize()}.")
+    if wx:
+        parts.append(f"Present weather: {wx}.")
     parts.append(f"{sky.capitalize()}.")
-    if wx.strip():
-        parts.append(f"{wx.strip()}.")
     if temp_c is not None and dewp_c is not None:
         parts.append(
             f"Temperature {_fmt_c(temp_c)}°C ({_c_to_f(temp_c)}°F), "
             f"dewpoint {_fmt_c(dewp_c)}°C ({_c_to_f(dewp_c)}°F)."
         )
     parts.append(f"Altimeter {altim}.")
+    if raw:
+        parts.append(f"Raw METAR: {raw}.")
     return " ".join(parts)
 
 
