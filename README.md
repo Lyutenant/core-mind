@@ -479,36 +479,71 @@ TAF output includes: station name + ICAO, validity window in Zulu, each forecast
 
 When a tool fires, a chip badge appears on the turn card in the dashboard (e.g., `⚙ get_aviation_weather`).
 
-### Adding MCP servers (Phase B — coming soon)
+### MCP servers (Phase B — Hub MCP client)
 
-Any MCP-compatible server can be wired in through config — no code changes needed:
+Any MCP-compatible server can be wired in through config — no code changes needed. The Hub connects at startup, fetches tool schemas, and makes them available to the LLM alongside built-in tools.
 
+Install the mcp SDK once:
+```bash
+pip install 'coremind[tools]'
+```
+
+Add servers to Hub `config.yaml`:
 ```yaml
 tools:
   mcp_servers:
-    - name: filesystem
+    - name: filesystem        # stdio: spawn a local subprocess
       transport: stdio
       command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
+    - name: node              # http: connect to the Pi's Node MCP server
+      transport: http
+      url: http://100.x.x.x:8767   # Pi's Tailscale IP
 ```
 
-### Node-side tools (Phase C — coming soon)
+Hub logs confirm connected servers and the number of tools registered:
+```
+Connected to MCP server: node (http)
+MCP server 'node': 4 tool(s) registered
+```
 
-The Pi can run a local MCP server exposing its own capabilities (music playback, volume control, etc.). The Hub connects to it over Tailscale just like any other MCP server:
+### Voice-controlled music player (Phase C — Node MCP server)
 
+The Pi runs a local MCP server on port 8767 that exposes four tools: `search_music`, `play_music`, `stop_playback`, and `set_volume`. The Hub's LLM calls these over Tailscale just like any other tool.
+
+**Pi setup:**
+```bash
+sudo apt install mpv          # audio player used by play_music
+pip install 'coremind[tools]' # mcp SDK
+```
+
+Add to Node `config.yaml`:
 ```yaml
-# Hub config.yaml
+node_mcp:
+  enabled: true
+  port: 8767
+  music_dir: ~/Music   # directory searched recursively for audio files
+```
+
+Add to Hub `config.yaml`:
+```yaml
 tools:
   mcp_servers:
     - name: node
       transport: http
       url: http://100.x.x.x:8767   # Pi's Tailscale IP
-
-# Node config.yaml
-node_mcp:
-  enabled: true
-  port: 8767
-  music_dir: ~/Music
 ```
+
+**Voice commands:**
+- "Play some jazz" → searches `~/Music` for files/folders with "jazz" in the name → plays the first match via mpv
+- "Stop the music" → terminates mpv
+- "Set the volume to 60 percent" → calls `pactl` (or `amixer` if pactl is unavailable)
+- "Play Kind of Blue" → finds that specific album or file
+
+Music is searched by **filename and parent directory name** — organize `~/Music` by genre or artist folders for best results (e.g. `~/Music/jazz/`, `~/Music/Miles Davis/`).
+
+**Mic isolation during playback**
+
+When music is playing and the wake word fires, CoreMind automatically suspends mpv (`SIGSTOP`) before recording starts, so only your voice reaches the microphone. After the response is spoken, mpv resumes (`SIGCONT`) from exactly where it paused — no gap, no restart. This happens transparently whether the turn ends normally, times out, or errors.
 
 ---
 
@@ -672,8 +707,8 @@ coremind/
 | 8 | Voice activity detection | ✓ |
 | 9 | CoreMind Hub web server + dashboard | ✓ |
 | 10a | Tool layer — built-in tools (time, weather, aviation weather) + Ollama tool loop | ✓ |
-| 10b | Tool layer — Hub MCP client (connect to any MCP server) | planned |
-| 10c | Tool layer — Node MCP server (Pi exposes local capabilities) | planned |
+| 10b | Tool layer — Hub MCP client (connect to any MCP server) | ✓ |
+| 10c | Tool layer — Node MCP server + voice-controlled music player + mic isolation | ✓ |
 | 12 | systemd user service (Pi auto-start at boot) | ✓ |
 | 13 | Observability / `coremind doctor` command | ✓ |
 | 14 | Node auto-registration + Hub Nodes panel | ✓ |
