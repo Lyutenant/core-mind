@@ -16,32 +16,70 @@ A two-component voice assistant system built around a Raspberry Pi and a Mac Min
 
 ---
 
+## Table of Contents
+
+- [Hardware](#hardware)
+- [Architecture Decision](#architecture-decision)
+- [Hub Setup — Mac Mini](#hub-setup--mac-mini)
+  - [1.1 Install system dependencies](#11-install-system-dependencies)
+  - [1.2 Clone the repository](#12-clone-the-repository)
+  - [1.3 Create the Python virtual environment](#13-create-the-python-virtual-environment)
+  - [1.4 Install dependencies](#14-install-dependencies)
+  - [1.5 Create the Hub config](#15-create-the-hub-config)
+  - [1.6 Start the Hub](#16-start-the-hub)
+  - [1.7 Find your Tailscale IP](#17-find-your-tailscale-ip)
+- [Node Setup — Raspberry Pi](#node-setup--raspberry-pi)
+  - [2.1 Install system dependencies](#21-install-system-dependencies)
+  - [2.2 Clone the repository](#22-clone-the-repository)
+  - [2.3 Create the Python virtual environment](#23-create-the-python-virtual-environment)
+  - [2.4 Install dependencies](#24-install-dependencies)
+  - [2.5 Create the Node config](#25-create-the-node-config)
+  - [2.6 Find audio device indexes](#26-find-audio-device-indexes)
+  - [2.7 Test audio](#27-test-audio)
+  - [2.8 Start the Node](#28-start-the-node)
+- [Web Dashboard](#web-dashboard)
+  - [Nodes Panel](#nodes-panel)
+  - [Wake Word Threshold](#wake-word-threshold)
+  - [Follow-up Conversation](#follow-up-conversation)
+  - [Mobile Access](#mobile-access)
+- [Tool Calling](#tool-calling)
+  - [Built-in Tools](#built-in-tools)
+  - [MCP Servers](#mcp-servers)
+  - [Voice-Controlled Music Player](#voice-controlled-music-player)
+- [Persistent Service — systemd](#persistent-service--systemd)
+- [All-on-Pi Mode (No Hub)](#all-on-pi-mode-no-hub)
+- [Updating](#updating)
+- [Commands Reference](#commands-reference)
+- [Package Architecture](#package-architecture)
+- [Roadmap](#roadmap)
+
+---
+
 ## Hardware
 
-| Component | Details |
-|-----------|---------|
+| Component | Role |
+|-----------|------|
 | Raspberry Pi 5, 8 GB | CoreMind Node |
 | USB microphone or ReSpeaker XVF3800 | connected to Pi |
 | Speaker (USB, 3.5 mm, or HDMI) | connected to Pi |
 | Mac Mini | CoreMind Hub — runs Ollama + Hub server |
-| Tailscale | connects Pi and Mac Mini on a private network |
+| Tailscale | private network between Pi and Mac Mini |
 
 ---
 
-## Quick Architecture Decision
+## Architecture Decision
 
 In the default **remote brain** mode, the Pi only handles audio I/O and wake word. All heavy computation (STT, LLM, TTS) runs on the Mac Mini. This reduces per-turn latency from ~30 s to ~12–15 s (dominated by the LLM).
 
-If you want to run everything on the Pi (no Mac Mini), set `remote_brain.enabled: false` in the Pi config and configure STT, TTS, and Ollama to run locally.
+If you want to run everything on the Pi (no Mac Mini), see [All-on-Pi Mode](#all-on-pi-mode-no-hub).
 
 ---
 
-## Part 1 — Mac Mini Setup (CoreMind Hub)
+## Hub Setup — Mac Mini
 
 ### 1.1 Install system dependencies
 
 ```bash
-# macOS — Homebrew
 brew install portaudio espeak-ng
 ```
 
@@ -57,31 +95,21 @@ cd core-mind
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-```
-
-Verify:
-```bash
 python --version   # should print Python 3.11.x
 ```
 
-### 1.4 Install the package and server dependencies
+### 1.4 Install dependencies
 
 ```bash
 pip install -e ".[dev,stt,server]"
 ```
 
-This installs:
-- `coremind` in editable mode (changes to source take effect immediately)
-- `faster-whisper` for local speech-to-text
-- `fastapi`, `uvicorn`, `python-multipart` for the Hub web server
+This installs `coremind` (editable), `faster-whisper` (STT), and `fastapi`/`uvicorn` (Hub server).
 
 **Optional — Piper TTS (neural voice, recommended):**
 ```bash
 pip install piper-tts
-```
 
-Then download a voice model from [rhasspy/piper-voices](https://github.com/rhasspy/piper-voices). You need both the `.onnx` and `.onnx.json` files:
-```bash
 mkdir -p ~/piper-voices
 curl -L -o ~/piper-voices/en_US-amy-medium.onnx \
   "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx"
@@ -89,84 +117,74 @@ curl -L -o ~/piper-voices/en_US-amy-medium.onnx.json \
   "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"
 ```
 
-**Optional — espeak-ng (simpler, robotic voice, no model download):**
+**Optional — espeak-ng (simpler, robotic voice, no download):**
 ```bash
-brew install espeak-ng   # already done in 1.1 if you ran it
+brew install espeak-ng   # already done if you ran step 1.1
 ```
 
 ### 1.5 Create the Hub config
 
 **Option A — browser UI (recommended):**
 ```bash
-source .venv/bin/activate
 coremind setup        # opens config UI at http://localhost:8766
 ```
-Open the URL, set Mode to **Hub**, fill in the settings, click **Save Configuration**, then Ctrl+C and start the Hub normally.
+Set Mode to **Hub**, fill in the settings, click **Save Configuration**, then Ctrl+C.
 
-**Option B — copy the example file and edit manually:**
+**Option B — copy and edit manually:**
 ```bash
 cp config.hub.example.yaml config.yaml
 ```
 
 Key Hub settings:
-
 ```yaml
 mode: hub
 
 app:
-  name: Jarvis          # your assistant's name
-  user_location: "San Francisco, CA"   # default location for weather/time questions (optional)
-  user_timezone: "America/Los_Angeles" # IANA timezone — used by time tool (optional)
-  home_airport: "KJYO"                 # default airport for aviation weather queries (optional)
-  taf_airport: "KIAD"                  # nearest airport with TAF, used when home airport lacks one
+  name: Jarvis
+  user_location: "San Francisco, CA"   # fallback for weather/time (optional)
+  user_timezone: "America/Los_Angeles" # IANA timezone (optional)
+  home_airport: "KJYO"                 # default for aviation weather (optional)
+  taf_airport: "KIAD"                  # nearest airport with TAF
 
 runtime:
-  follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
+  follow_up_seconds: 5.0   # listen this long after a response; 0.0 to disable
 
 stt:
   provider: whisper_local
-  model: base           # tiny/base/small — base is fastest reasonable choice on Mac
+  model: base           # tiny/base/small
 
 tts:
   provider: piper_local
   model_path: /Users/yourname/piper-voices/en_US-amy-medium.onnx
   # or: provider: espeak
 
-brain:
-  provider: ollama
-  timeout_seconds: 90
-
 ollama:
-  base_url: http://localhost:11434    # Ollama runs locally on Mac Mini
-  model: gemma4:e4b                   # must be pulled: ollama pull gemma4:e4b
-  no_think: false
+  base_url: http://localhost:11434
+  model: gemma4:e4b     # ollama pull gemma4:e4b
 
 tools:
   enabled: true
-  built_in: [time, weather, aviation_weather]   # add aviation_weather for METAR/TAF/PIREP
+  built_in: [time, weather, aviation_weather]
 
 remote_brain:
-  enabled: false    # Hub does not forward to another Hub
+  enabled: false        # Hub does not forward to another Hub
 ```
 
 ### 1.6 Start the Hub
 
 ```bash
-source .venv/bin/activate
 coremind server
-# or: python -m coremind.main server
 ```
 
 You should see:
 ```
 CoreMind Hub starting — listening on 0.0.0.0:8765
   Dashboard: http://localhost:8765
-  Node config: set remote_brain.enabled: true and remote_brain.url: http://<this-host>:8765
 ```
 
-Open **http://localhost:8765** in your browser. The dashboard shows live conversation turns and lets you edit all settings without touching YAML.
+Open **http://localhost:8765** in your browser.
 
-### 1.7 Find your Mac Mini's Tailscale IP
+### 1.7 Find your Tailscale IP
 
 ```bash
 tailscale ip -4
@@ -177,21 +195,17 @@ You will need this IP when configuring the Node.
 
 ---
 
-## Part 2 — Raspberry Pi Setup (CoreMind Node)
+## Node Setup — Raspberry Pi
 
 ### 2.1 Install system dependencies
 
 ```bash
 sudo apt update
 sudo apt install -y libportaudio2 portaudio19-dev python3.11 python3.11-venv git
+python3.11 --version   # should print Python 3.11.x
 ```
 
-Check the Python version:
-```bash
-python3.11 --version    # should print Python 3.11.x
-```
-
-If 3.11 is not available from apt:
+If 3.11 is not in apt:
 ```bash
 sudo apt install -y software-properties-common
 sudo add-apt-repository ppa:deadsnakes/ppa
@@ -211,14 +225,10 @@ cd core-mind
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-```
-
-Verify:
-```bash
 python --version   # Python 3.11.x
 ```
 
-### 2.4 Install the package and Node dependencies
+### 2.4 Install dependencies
 
 ```bash
 pip install -e ".[dev]"
@@ -226,35 +236,33 @@ pip install -e ".[dev]"
 
 **Optional — wake word detection (required for always-on "Hey Jarvis" mode):**
 ```bash
-# Step 1: install onnxruntime (the inference backend we use on Pi)
+# Step 1: install onnxruntime (Pi-compatible inference backend)
 pip install 'coremind[wake_word]'
 
-# Step 2: install openwakeword WITHOUT its dependencies
-# (its tflite-runtime dependency has no Pi ARM64 wheel for Python 3.11+)
+# Step 2: install openwakeword without its tflite dependency
+# (tflite-runtime has no Pi ARM64 wheel for Python 3.11+)
 pip install openwakeword --no-deps
 
 # Step 3: download the built-in wake word models
 python -c "import openwakeword; openwakeword.utils.download_models()"
 ```
 
-> **Note:** Always use `inference_framework: onnx` in config. The `tflite` backend requires `tflite-runtime` which is incompatible with NumPy 2.x on Raspberry Pi OS.
+> **Note:** Always use `inference_framework: onnx` in config — `tflite` is incompatible with NumPy 2.x on Raspberry Pi OS.
 
 ### 2.5 Create the Node config
 
 **Option A — browser UI:**
 ```bash
-source .venv/bin/activate
 coremind setup        # opens config UI at http://<pi-ip>:8766
 ```
 Set Mode to **Node**, enter the Hub URL, set audio device indexes, save, Ctrl+C.
 
-**Option B — copy the example file:**
+**Option B — copy and edit manually:**
 ```bash
 cp config.node.example.yaml config.yaml
 ```
 
 Key Node settings:
-
 ```yaml
 mode: node
 
@@ -262,17 +270,16 @@ app:
   name: Jarvis   # must match the Hub's name
 
 audio:
-  # Run: coremind audio list-devices  to find device indexes
-  input_device: null    # or: 0, 1, 2 — your USB microphone index
-  output_device: null   # or: 0, 1, 2 — your speaker index
-  sample_rate: 16000    # match your mic's native rate
+  input_device: null    # set to your USB mic index (see step 2.6)
+  output_device: null   # set to your speaker index
+  sample_rate: 16000
 
 runtime:
-  follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
+  follow_up_seconds: 5.0
 
 remote_brain:
   enabled: true
-  url: http://100.x.x.x:8765    # your Mac Mini's Tailscale IP from step 1.7
+  url: http://100.x.x.x:8765    # Mac Mini Tailscale IP from step 1.7
   timeout_seconds: 90.0
 
 wake_word:
@@ -290,28 +297,26 @@ vad:
   min_speech_seconds: 0.3
 ```
 
-### 2.6 Find your audio device indexes
+### 2.6 Find audio device indexes
 
 ```bash
-source .venv/bin/activate
 coremind audio list-devices
 ```
 
 Update `audio.input_device` and `audio.output_device` in `config.yaml` with the correct indexes.
 
-### 2.7 Test audio recording and playback
+### 2.7 Test audio
 
 ```bash
 coremind audio record-test --seconds 5 --output test.wav
 coremind audio play-test --file test.wav
 ```
 
-Verify that your voice was recorded and played back correctly before continuing.
+Verify that your voice is recorded and plays back before continuing.
 
 ### 2.8 Start the Node
 
 ```bash
-source .venv/bin/activate
 coremind run
 ```
 
@@ -322,88 +327,259 @@ Jarvis ready. Press Ctrl+C to quit.
 Listening for wake word (hey_jarvis_v0.1)...
 ```
 
-Say **"Hey Jarvis"** — you will hear a two-tone chime and see:
-```
-Wake word detected! Speak your question...
-```
-
-Speak your question. The audio is sent to the Hub, which transcribes, queries Ollama, synthesizes speech, and returns audio to play on the Pi.
+Say **"Hey Jarvis"** — you will hear a chime and recording begins. Your question is sent to the Hub, processed, and the audio response plays on the Pi.
 
 ---
 
-## Part 3 — Hub Web Dashboard
+## Web Dashboard
 
-Open **http://localhost:8765** (or `http://<mac-mini-ip>:8765` from another machine on Tailscale). The dashboard works on iPhone too — see [Mobile Access](#mobile-access--iphone--tailscale) below.
+Open **http://localhost:8765** (or `http://<mac-mini-tailscale-ip>:8765` from any Tailscale device). Works on iPhone — see [Mobile Access](#mobile-access).
 
 | Section | What it shows |
 |---------|--------------|
-| Dashboard | Live conversation log with tool call badges, real-time processing status |
-| Nodes | Connected Pi Nodes with online/offline status and per-node setting sliders |
-| System status (sidebar) | Ollama reachability, STT/TTS loaded state |
-| Settings → App | Mode (Hub/Node/Standalone), assistant name, log level, user location/timezone |
-| Settings → STT | Whisper provider, model size, language |
-| Settings → TTS | Provider (Piper/espeak), model path, voice |
-| Settings → Ollama | Server URL, model, no-think, inference options |
+| Dashboard | Live conversation log with tool call badges, real-time status |
+| Nodes | Connected Pi Nodes — online/offline status, per-node sliders |
+| Settings → App | Mode, assistant name, log level, location/timezone |
+| Settings → STT | Whisper model, language |
+| Settings → TTS | Provider, model path, voice |
+| Settings → Ollama | Server URL, model, no-think, options |
 | Settings → Memory | Session memory max turns |
-| Settings → Tools | Enable/disable built-in tools (time, weather) |
+| Settings → Tools | Enable/disable built-in tools |
 | Settings → VAD | Energy threshold, silence/max/min durations |
 | Settings → Wake Word | Provider, model, detection threshold |
 | Settings → Audio | Device indexes, sample rate, channels |
 | Settings → Hub Connection | Hub URL (for Node remote brain) |
 
-All settings are saved to `config.yaml` on the Hub when you click **Save Configuration**. The Hub reloads automatically — no restart required for most changes (STT/TTS/LLM model changes take effect on the next request).
+Settings are saved to `config.yaml` on the Hub when you click **Save Configuration**. Most changes take effect without a restart.
 
 ### Nodes Panel
 
-When a Node starts and connects to the Hub, it automatically appears in the **Nodes** view — no pairing or approval step. Each Node card shows:
+When a Node starts it automatically appears in the **Nodes** view — no pairing step. Each Node card shows:
 
-- Name, hostname, online/offline status (green dot = seen in last 90 s)
-- Per-node setting sliders: wake word threshold, VAD energy, VAD silence, max record time, min speech, follow-up window, min follow-up words, post-response cooldown
+- Name, hostname, online/offline indicator (green = seen in last 90 s)
+- Per-node sliders: wake word threshold, VAD energy, VAD silence, max record, min speech, follow-up window, min follow-up words, post-response cooldown
 
-Changes pushed from the Nodes panel take effect on the Node **within 30 seconds** (the Node polls on each heartbeat cycle) — no restart required. Click **Reset to defaults** to clear all overrides; the Node reverts to its `config.yaml` values on the next poll.
+Slider changes reach the Node within 30 seconds via heartbeat poll — no restart required. **Reset to defaults** clears all overrides and the Node reverts to its `config.yaml` values on the next poll.
 
-**Overrides survive restarts.** The Hub persists overrides to `~/.coremind/node-overrides.json`. On Node reconnect, both sides compare timestamps and the **most recently changed config wins**: if you edited `config.yaml` on the Pi after the last dashboard save, the Pi's values become the new override. If the dashboard was updated more recently, the Hub values win. This means you can tune settings from either the file or the browser and they will stay in sync.
+**Overrides survive restarts.** The Hub persists overrides to `~/.coremind/node-overrides.json` using a latest-wins timestamp: if you edited `config.yaml` on the Pi after the last dashboard save, the Pi's values win. If the dashboard was updated more recently, the Hub values win.
 
-All connected browsers (Mac Mini, iPhone, etc.) receive SSE events for node state changes and immediately refresh their Nodes panel — no manual reload needed.
+All connected browsers (Mac Mini, iPhone, etc.) receive SSE events and update the Nodes panel in real time.
 
 ### Wake Word Threshold
 
-The `threshold` value (0.0–1.0) is the minimum confidence score the openwakeword model must output before it fires. The model runs every 80 ms and scores every chunk — threshold is just the cut-off.
+The `threshold` value (0.0–1.0) controls how confident openwakeword must be before firing.
 
 | Threshold | Behavior |
 |-----------|----------|
-| 0.3–0.4 | Very sensitive — low false-negative rate, more false positives from TV/background speech |
+| 0.3–0.4 | Very sensitive — low miss rate, more false positives from TV/background speech |
 | **0.5** | **Default** — balanced for quiet home environments |
-| 0.6–0.7 | Conservative — less likely to fire on background noise; may miss soft triggers |
-| 0.8+ | Very strict — useful only if false positives are constant and re-triggering is acceptable |
+| 0.6–0.7 | Conservative — fewer false positives; may miss soft triggers |
+| 0.8+ | Very strict — only use if false positives are constant |
 
-In a noisy room (TV on, people talking), raise to 0.6–0.7 from the Nodes panel slider. You do not need to restart the Node.
+Adjust from the Nodes panel slider in real time — no Node restart needed.
 
 ### Follow-up Conversation
 
-After speaking a response, the Node listens for a follow-up question without requiring the wake phrase again. Three mechanisms prevent the session from running indefinitely on background noise:
+After responding, the Node listens for a follow-up without requiring the wake phrase again. Three mechanisms prevent the session from running indefinitely on background noise:
 
-- **Stop phrases** — saying "stop", "goodbye", "cancel", "that's all", etc. immediately ends the follow-up session and returns to wake-word mode.
-- **Min word filter** — if the transcribed follow-up is shorter than `follow_up_min_words` (default 2), it's discarded as likely background noise and the session ends.
-- **Post-response cooldown** — a brief pause (`post_response_cooldown_seconds`, default 1.0 s) after TTS playback before the mic reopens, so the speaker's audio cannot re-trigger recording.
+- **Stop phrases** — saying "stop", "goodbye", "cancel", "that's all", etc. ends the session and returns to wake-word mode.
+- **Min word filter** — follow-up transcripts shorter than `follow_up_min_words` (default 2) are discarded as background noise.
+- **Post-response cooldown** — a brief pause (`post_response_cooldown_seconds`, default 1.0 s) after TTS finishes before the mic reopens, preventing speaker echo from re-triggering.
 
-These are all tunable from the Nodes panel or `config.yaml` (under `runtime:`).
+All three are tunable from the Nodes panel or `config.yaml` under `runtime:`.
 
-### Mobile Access — iPhone + Tailscale
+### Mobile Access
 
 The dashboard layout is responsive. On a phone:
 
 - The sidebar collapses and a **bottom tab bar** replaces it (Chat | Nodes | Settings).
 - Settings forms reflow to a single column.
-- All controls meet the 44 px minimum touch target size.
+- All controls meet the 44 px minimum touch target.
 
-Open `http://<mac-mini-tailscale-ip>:8765` in Safari on an iPhone connected to the same Tailscale network. Use "Add to Home Screen" to bookmark it as a web app.
+Open `http://<mac-mini-tailscale-ip>:8765` in Safari and use **Add to Home Screen** to bookmark it as a web app.
 
 ---
 
-## Part 4 — Running Without Remote Brain (All-on-Pi Mode)
+## Tool Calling
 
-If you want to run everything on the Pi without a Hub:
+CoreMind uses the Ollama native tool API — the LLM decides when to call tools and the Hub executes them transparently.
+
+### Built-in Tools
+
+| Tool | Trigger example | Notes |
+|------|----------------|-------|
+| `get_current_time` | "What time is it?" | Uses `app.user_timezone` if set |
+| `get_weather` | "What's the weather?" / "Forecast for tomorrow?" | wttr.in, no API key; 1–3 day forecasts |
+| `get_aviation_weather` | "What's the METAR at Leesburg?" / "Any PIREPs?" | NOAA aviationweather.gov, no API key; METAR/TAF/PIREP |
+
+Enable in Hub `config.yaml`:
+```yaml
+tools:
+  enabled: true
+  built_in: [time, weather, aviation_weather]
+```
+
+**Weather and time defaults:**
+```yaml
+app:
+  user_location: "San Francisco, CA"   # fallback when no location is mentioned
+  user_timezone: "America/Los_Angeles" # IANA timezone name
+```
+You can still ask "What's the weather in Tokyo?" to override the default. The `get_weather` tool supports multi-day forecasts — ask "Will it rain tomorrow?" and the LLM passes `days=2` automatically.
+
+**Aviation weather defaults:**
+```yaml
+app:
+  home_airport: "KJYO"   # used when no airport is specified
+  taf_airport: "KIAD"    # nearest airport with TAF (small airports often lack one)
+```
+Ask "What's the METAR?" → uses `home_airport`. Ask "Is there a TAF?" → tries `home_airport`, auto-falls back to `taf_airport`. Use `report_type="full"` for a complete pre-flight briefing (METAR + TAF + PIREPs).
+
+When a tool fires, a chip badge appears on the turn card in the dashboard (e.g., `⚙ get_aviation_weather`).
+
+### MCP Servers
+
+Any MCP-compatible server can be wired in through config — no code changes needed. The Hub connects at startup and makes the server's tools available to the LLM alongside built-in tools.
+
+```bash
+pip install 'coremind[tools]'   # install the mcp SDK once
+```
+
+Add servers to Hub `config.yaml`:
+```yaml
+tools:
+  mcp_servers:
+    - name: filesystem        # stdio: spawn a local subprocess
+      transport: stdio
+      command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
+    - name: node              # http: connect to the Pi's Node MCP server
+      transport: http
+      url: http://100.x.x.x:8767   # Pi's Tailscale IP
+```
+
+### Voice-Controlled Music Player
+
+The Pi runs a local MCP server (port 8767) that exposes 13 music tools. The Hub's LLM calls these over Tailscale just like any other tool.
+
+**Pi setup:**
+```bash
+sudo apt install mpv          # audio player
+pip install 'coremind[tools]' # mcp SDK
+```
+
+**Node `config.yaml`:**
+```yaml
+node_mcp:
+  enabled: true
+  port: 8767
+  music_dir: ~/Music                           # root of your music library
+  catalog_path: ~/.coremind/music-catalog.json # built by 'coremind music scan'
+```
+
+**Hub `config.yaml`:**
+```yaml
+tools:
+  mcp_servers:
+    - name: node
+      transport: http
+      url: http://100.x.x.x:8767
+```
+
+**Music library organization**
+
+Organize music with Artist and Album subfolders — the catalog infers structure from folder depth:
+
+```
+~/Music/
+  Miles Davis/
+    Kind of Blue/
+      01 - So What.mp3
+      02 - Freddie Freeloader.mp3
+  John Coltrane/
+    A Love Supreme/
+      01 - Acknowledgement.mp3
+```
+
+After adding music, build (or rebuild) the catalog:
+```bash
+coremind music scan
+# Scanned 127 tracks — 12 artists, 18 albums.
+```
+
+The catalog is saved to `~/.coremind/music-catalog.json`. Re-run whenever you add new music. CoreMind warns in logs if the music directory is newer than the catalog.
+
+**Available tools (13):**
+
+| Tool | Voice example |
+|------|--------------|
+| `search_music` | "Find any jazz tracks" |
+| `play_track` | "Play /home/pi/Music/..." |
+| `play_artist` | "Play Miles Davis" / "Play Coltrane, shuffled" |
+| `play_album` | "Play Kind of Blue" |
+| `play_playlist` | "Play my morning playlist" |
+| `stop_playback` | "Stop the music" |
+| `set_volume` | "Set the volume to 60 percent" |
+| `list_artists` | "What artists do I have?" |
+| `list_albums` | "What albums by Miles Davis?" |
+| `list_playlists` | "What playlists do I have?" |
+| `create_playlist` | "Create a playlist called 'morning jazz' with these tracks" |
+| `add_to_playlist` | "Add that album to my workout playlist" |
+| `remove_from_playlist` | "Remove that track from morning jazz" |
+
+Playlists are persisted in the catalog JSON immediately and survive Node restarts.
+
+**Mic isolation during playback**
+
+When music is playing and the wake word fires, CoreMind suspends mpv (`SIGSTOP`) before recording starts so only your voice reaches the mic. After the response is spoken, mpv resumes (`SIGCONT`) from exactly where it paused — no gap, no restart. A `try/finally` guarantees resume even on errors or timeouts.
+
+---
+
+## Persistent Service — systemd
+
+Running `coremind run` in a tmux session works, but a systemd user service starts automatically at boot and restarts on crashes.
+
+**Install the service:**
+```bash
+REPO=~/core-mind   # adjust if you cloned elsewhere
+
+mkdir -p ~/.config/systemd/user
+cp $REPO/coremind/service/coremind.service ~/.config/systemd/user/coremind.service
+sed -i "s|%h/core-mind|$REPO|g" ~/.config/systemd/user/coremind.service
+systemctl --user daemon-reload
+```
+
+**Enable and start:**
+```bash
+systemctl --user enable coremind   # auto-start at login
+systemctl --user start coremind    # start now
+```
+
+**Start at boot without logging in first (run once):**
+```bash
+loginctl enable-linger $USER
+```
+
+**Status and logs:**
+```bash
+systemctl --user status coremind
+journalctl --user -u coremind -f        # follow live logs
+journalctl --user -u coremind -n 50     # last 50 lines
+```
+
+**Common commands:**
+```bash
+systemctl --user stop coremind          # stop
+systemctl --user restart coremind       # restart after a config change
+systemctl --user disable coremind       # remove from auto-start
+```
+
+> The service file uses `%h` for your home directory and waits 3 seconds after boot to let audio devices settle.
+
+---
+
+## All-on-Pi Mode (No Hub)
+
+Set `remote_brain.enabled: false` and configure everything locally:
 
 ```yaml
 remote_brain:
@@ -421,233 +597,32 @@ brain:
 
 ollama:
   base_url: http://100.x.x.x:11434    # Mac Mini Ollama (recommended)
-  # or: http://localhost:11434         # if running Ollama on the Pi itself
+  # or: http://localhost:11434         # if Ollama runs on the Pi itself
 ```
 
-Install STT on the Pi:
+Install STT and espeak on the Pi:
 ```bash
 pip install 'coremind[stt]'
-```
-
-Install espeak:
-```bash
 sudo apt install espeak-ng
 ```
 
 ---
 
-## Part 5 — Tool Calling
+## Updating
 
-CoreMind uses the Ollama native tool API so the LLM can call real-world functions before answering. Tools are enabled on the Hub and run transparently — the LLM decides when to use them.
-
-### Built-in tools (available now)
-
-| Tool | Trigger example | Notes |
-|------|----------------|-------|
-| `get_current_time` | "What time is it?" | No external deps; uses `app.user_timezone` if set |
-| `get_weather` | "What's the weather?" / "Forecast for tomorrow?" | wttr.in, no API key; supports 1–3 day forecasts |
-| `get_aviation_weather` | "What's the METAR at Leesburg?" / "Any PIREPs nearby?" | NOAA aviationweather.gov, no API key; METAR/TAF/PIREP |
-
-Enable in Hub `config.yaml`:
-```yaml
-tools:
-  enabled: true
-  built_in: [time, weather, aviation_weather]
-```
-
-**Weather and time defaults** — set a location and timezone so you can ask without specifying a place:
-```yaml
-app:
-  user_location: "San Francisco, CA"   # fallback when no location is mentioned
-  user_timezone: "America/Los_Angeles" # IANA name — time tool reports in this timezone
-```
-You can still ask "What's the weather in Tokyo?" to override the default. The timezone must be a valid [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones); an invalid value logs a warning and falls back to server local time.
-
-The `get_weather` tool supports multi-day forecasts. Ask "What's the forecast for this week?" or "Will it rain tomorrow?" and the LLM passes `days=2` or `days=3` automatically.
-
-**Aviation weather defaults** — set your home airport so you can ask without an ICAO code:
-```yaml
-app:
-  home_airport: "KJYO"   # used when no airport is specified
-  taf_airport: "KIAD"    # nearest airport with TAF (small airports often lack one)
-```
-Ask "What's the METAR?" → uses `home_airport`. Ask "Is there a TAF?" → tries `home_airport`, falls back to `taf_airport` automatically with a note. Ask "What's the METAR at KIAD?" to override. Use `report_type="full"` for a complete pre-flight briefing (METAR + TAF + PIREPs in one response).
-
-METAR output includes: station name + ICAO, flight category, observation time and age in minutes, wind (including variable/VRB and gusts), visibility, present weather, each sky layer with ceiling annotation on the lowest BKN/OVC layer, temperature and dewpoint in °C and °F, altimeter, and the raw METAR string.
-
-TAF output includes: station name + ICAO, validity window in Zulu, each forecast period with time label (FM, BECMG, TEMPO, PROB) and end time, wind shear when present, and the raw TAF string.
-
-When a tool fires, a chip badge appears on the turn card in the dashboard (e.g., `⚙ get_aviation_weather`).
-
-### MCP servers (Phase B — Hub MCP client)
-
-Any MCP-compatible server can be wired in through config — no code changes needed. The Hub connects at startup, fetches tool schemas, and makes them available to the LLM alongside built-in tools.
-
-Install the mcp SDK once:
-```bash
-pip install 'coremind[tools]'
-```
-
-Add servers to Hub `config.yaml`:
-```yaml
-tools:
-  mcp_servers:
-    - name: filesystem        # stdio: spawn a local subprocess
-      transport: stdio
-      command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
-    - name: node              # http: connect to the Pi's Node MCP server
-      transport: http
-      url: http://100.x.x.x:8767   # Pi's Tailscale IP
-```
-
-Hub logs confirm connected servers and the number of tools registered:
-```
-Connected to MCP server: node (http)
-MCP server 'node': 4 tool(s) registered
-```
-
-### Voice-controlled music player (Phase C — Node MCP server)
-
-The Pi runs a local MCP server on port 8767 that exposes 13 tools for searching, playing, and organizing music. The Hub's LLM calls these over Tailscale just like any other tool.
-
-**Pi setup:**
-```bash
-sudo apt install mpv          # audio player
-pip install 'coremind[tools]' # mcp SDK
-```
-
-Add to Node `config.yaml`:
-```yaml
-node_mcp:
-  enabled: true
-  port: 8767
-  music_dir: ~/Music                           # root of your music library
-  catalog_path: ~/.coremind/music-catalog.json # built by 'coremind music scan'
-```
-
-Add to Hub `config.yaml`:
-```yaml
-tools:
-  mcp_servers:
-    - name: node
-      transport: http
-      url: http://100.x.x.x:8767   # Pi's Tailscale IP
-```
-
-**Music library organization**
-
-Organize your music library with Artist and Album subfolders — the catalog builder infers structure from folder depth:
-
-```
-~/Music/
-  Miles Davis/
-    Kind of Blue/
-      01 - So What.mp3
-      02 - Freddie Freeloader.mp3
-  John Coltrane/
-    A Love Supreme/
-      01 - Acknowledgement.mp3
-```
-
-After adding music, build the catalog:
-```bash
-coremind music scan
-# Scanned 127 tracks — 12 artists, 18 albums.
-```
-
-The catalog is saved to `~/.coremind/music-catalog.json`. Re-run whenever you add new music. CoreMind warns in the logs if the music directory is newer than the catalog.
-
-**Available MCP tools (13):**
-
-| Tool | Voice example |
-|------|--------------|
-| `search_music` | "Find any jazz tracks" |
-| `play_track` | "Play /home/pi/Music/..." |
-| `play_artist` | "Play Miles Davis" / "Play all Coltrane, shuffled" |
-| `play_album` | "Play Kind of Blue" |
-| `play_playlist` | "Play my morning playlist" |
-| `stop_playback` | "Stop the music" |
-| `set_volume` | "Set the volume to 60 percent" |
-| `list_artists` | "What artists do I have?" |
-| `list_albums` | "What albums by Miles Davis?" |
-| `list_playlists` | "What playlists do I have?" |
-| `create_playlist` | "Create a playlist called 'morning jazz' with these three tracks" |
-| `add_to_playlist` | "Add that album to my workout playlist" |
-| `remove_from_playlist` | "Remove that track from morning jazz" |
-
-Playlists are persisted in the catalog JSON immediately and survive Node restarts.
-
-**Mic isolation during playback**
-
-When music is playing and the wake word fires, CoreMind automatically suspends mpv (`SIGSTOP`) before recording starts, so only your voice reaches the microphone. After the response is spoken, mpv resumes (`SIGCONT`) from exactly where it paused — no gap, no restart. This happens transparently whether the turn ends normally, times out, or errors.
-
----
-
-## Part 6 — Running the Node as a Persistent Service (recommended)
-
-Running `coremind run` in tmux works, but a systemd user service starts automatically at boot and restarts on crashes — no SSH session required.
-
-### 6.1 Install the service file
+When you pull changes from the repo:
 
 ```bash
-# On the Pi — adjust the path if you cloned to a different location
-REPO=~/core-mind          # change to e.g. ~/Sandbox/core-mind if needed
-
-mkdir -p ~/.config/systemd/user
-cp $REPO/coremind/service/coremind.service ~/.config/systemd/user/coremind.service
-
-# Update the paths inside the installed file to match your repo location
-sed -i "s|%h/core-mind|$REPO|g" ~/.config/systemd/user/coremind.service
-
-systemctl --user daemon-reload
-```
-
-### 6.2 Enable and start
-
-```bash
-systemctl --user enable coremind   # start automatically at login
-systemctl --user start coremind    # start right now
-```
-
-### 6.3 Start at boot (without needing to log in first)
-
-```bash
-loginctl enable-linger $USER
-```
-
-This tells systemd to start your user services at boot, even before you SSH in. Only needs to be run once.
-
-### 6.4 Check status and logs
-
-```bash
-systemctl --user status coremind
-journalctl --user -u coremind -f        # follow live logs
-journalctl --user -u coremind -n 50     # last 50 lines
-```
-
-### 6.5 Common commands
-
-```bash
-systemctl --user stop coremind          # stop the service
-systemctl --user restart coremind       # restart (e.g. after config change)
-systemctl --user disable coremind       # remove from auto-start
-```
-
-> **Note:** The service file uses `%h` for your home directory, so it works regardless of your username. It waits 3 seconds after start to let audio devices settle after boot.
-
----
-
-## Keeping the Node in Sync with the Hub
-
-When you push changes to the repo:
-
-```bash
-# On Pi
 cd core-mind
 git pull
-# No pip reinstall needed for source changes (editable install).
+# Editable install: source changes take effect immediately.
 # Only reinstall if pyproject.toml changed:
 pip install -e ".[dev]"
+```
+
+If running the systemd service:
+```bash
+systemctl --user restart coremind
 ```
 
 ---
@@ -655,7 +630,7 @@ pip install -e ".[dev]"
 ## Commands Reference
 
 ```bash
-# Initial setup — any device (Hub or Node)
+# Setup — any device
 coremind setup                          # open config UI at http://localhost:8766
 coremind setup --port 9000             # custom port
 
@@ -670,21 +645,21 @@ coremind audio play-test -f test.wav
 
 # Node (Pi) — voice interaction
 coremind run                            # full mode: wake word + VAD + remote brain
-coremind chat loop                      # push-to-talk loop (local mode, no wake word)
-coremind chat once                      # single push-to-talk interaction
-
-# Diagnostics (any device)
-coremind doctor                         # check Python, config, audio, Ollama, STT, TTS, disk
+coremind chat loop                      # push-to-talk loop (no wake word)
+coremind chat once                      # single push-to-talk turn
 
 # Music library (Node)
-coremind music scan                     # scan ~/Music and build ~/.coremind/music-catalog.json
+coremind music scan                     # scan music_dir and rebuild catalog
 
-# Node systemd service (Pi)
-systemctl --user status coremind        # show service status
-systemctl --user restart coremind       # restart after config changes
-systemctl --user stop coremind          # stop the service
-journalctl --user -u coremind -f        # follow live logs
-journalctl --user -u coremind -n 50     # last 50 lines
+# Diagnostics — any device
+coremind doctor                         # check Python, config, audio, Ollama, STT, TTS, disk
+
+# systemd service (Pi)
+systemctl --user status coremind
+systemctl --user restart coremind
+systemctl --user stop coremind
+journalctl --user -u coremind -f
+journalctl --user -u coremind -n 50
 
 # Development
 pytest                                  # run unit tests (no hardware required)
@@ -692,25 +667,24 @@ pytest                                  # run unit tests (no hardware required)
 
 ### `coremind doctor`
 
-Runs a pre-flight check on the current machine and prints a colour-coded summary:
+Pre-flight check with a colour-coded summary. Exit code is 1 if any check fails.
 
 ```
 ┌──────── CoreMind Doctor ────────────────────────┐
-│ Python          3.11.9                  [OK]     │
-│ Config file     config.yaml found       [OK]     │
-│ Audio devices   3 input, 2 output       [OK]     │
-│ Ollama          gemma4:e4b reachable    [OK]     │
-│ STT             faster-whisper 1.0.3    [OK]     │
-│ TTS             piper found             [OK]     │
-│ Disk write      /tmp writable           [OK]     │
+│   OK   Python version    3.11.9                  │
+│   OK   Config file       config.yaml (mode: hub) │
+│   OK   Audio input       3 device(s) found       │
+│   OK   Audio output      2 device(s) found       │
+│   OK   Ollama            gemma4:e4b available     │
+│   OK   STT               faster-whisper available │
+│   OK   TTS               espeak-ng found          │
+│   OK   Disk write        /tmp is writable         │
 └─────────────────────────────────────────────────┘
 ```
 
-Use this to diagnose setup problems before filing a bug report. Exit code is 1 if any check fails.
-
 ---
 
-## Architecture
+## Package Architecture
 
 ```
 coremind/
@@ -724,9 +698,11 @@ coremind/
   wake_word/      Wake-word detection (openwakeword/onnx, dummy/Enter-key)
   vad/            Voice activity detection (energy-based)
   server/         CoreMind Hub — FastAPI server + web dashboard
-  tools/          Tool layer — dispatcher, built-in tools, MCP client (Phase B)
-    built_in/     get_current_time, get_weather (multi-day), get_aviation_weather (METAR/TAF/PIREP)
-  node_mcp/       Node MCP server — exposes Pi capabilities to Hub (Phase C)
+  tools/          Tool dispatcher, built-in tools, Hub MCP client
+    built_in/     get_current_time, get_weather, get_aviation_weather
+  node_mcp/       Node MCP server — exposes Pi capabilities to Hub
+    catalog.py    Music catalog (scan, search, playlist CRUD)
+    tools/        music_player, volume_control
 ```
 
 ---
@@ -745,11 +721,12 @@ coremind/
 | 7 | Wake word (openwakeword) | ✓ |
 | 8 | Voice activity detection | ✓ |
 | 9 | CoreMind Hub web server + dashboard | ✓ |
-| 10a | Tool layer — built-in tools (time, weather, aviation weather) + Ollama tool loop | ✓ |
+| 10a | Tool layer — built-in tools (time, weather, aviation weather) | ✓ |
 | 10b | Tool layer — Hub MCP client (connect to any MCP server) | ✓ |
-| 10c | Tool layer — Node MCP server + voice-controlled music player + mic isolation | ✓ |
+| 10c | Tool layer — Node MCP server + music player + mic isolation | ✓ |
 | 12 | systemd user service (Pi auto-start at boot) | ✓ |
-| 13 | Observability / `coremind doctor` command | ✓ |
+| 13 | `coremind doctor` diagnostics command | ✓ |
 | 14 | Node auto-registration + Hub Nodes panel | ✓ |
-| 15 | Mobile-responsive dashboard (bottom tab bar, iPhone support) | ✓ |
+| 15 | Mobile-responsive dashboard (iPhone + Tailscale) | ✓ |
 | 16 | Follow-up loop safety (stop phrases, min-word filter, cooldown) | ✓ |
+| 34 | Music catalog (artist/album/playlist browse + voice CRUD) | ✓ |
