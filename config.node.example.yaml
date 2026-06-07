@@ -8,6 +8,12 @@ mode: node   # this device records audio and sends it to the Hub
 app:
   name: Jarvis   # must match the Hub's name exactly
   log_level: INFO
+  # The fields below are only used when remote_brain is disabled (standalone/local mode).
+  # In remote-brain mode the Hub's config.yaml controls these instead.
+  # user_location: "San Francisco, CA"   # fallback location for weather questions
+  # user_timezone: "America/Los_Angeles" # IANA timezone — used by time tool
+  # home_airport: "KJYO"                 # default ICAO for aviation weather
+  # taf_airport: "KIAD"                  # nearest airport with TAF
 
 runtime:
   mode: push_to_talk
@@ -95,6 +101,13 @@ memory:
 openclaw:
   base_url: null
   agent: coremind
+
+tools:
+  # Only relevant when remote_brain is disabled (standalone/local mode).
+  # In remote-brain mode the Hub executes tools; the Node does not.
+  enabled: true
+  built_in: [time, weather, aviation_weather]
+  # mcp_servers: []   # MCP servers to connect to at startup (requires pip install 'coremind[tools]')
 
 # Node MCP server — exposes Pi-local capabilities (music, volume) to the Hub's LLM.
 # Requires: pip install 'coremind[tools]' and sudo apt install mpv
