@@ -276,7 +276,7 @@ try:
 
     @app.on_event("startup")
     async def _startup():
-        nonlocal _mcp_manager
+        global _mcp_manager
         asyncio.create_task(_node_offline_watcher())
         s = _get_settings()
         if s.tools.enabled and s.tools.mcp_servers:
