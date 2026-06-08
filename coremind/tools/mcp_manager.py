@@ -48,19 +48,9 @@ class MCPManager:
             )
             self._tasks[srv.name] = task
 
-        # Wait for all servers to signal ready (or fail)
+        # Wait for all servers to signal ready (or fail on first attempt).
+        # Schema registration happens inside _hold_connection once connected.
         await asyncio.gather(*[ev.wait() for ev in ready_events.values()])
-
-        # Fetch tool schemas from every connected session
-        for name, session in list(self._sessions.items()):
-            try:
-                result = await session.list_tools()
-                for tool in result.tools:
-                    self._schemas.append(self._to_ollama_schema(tool))
-                    self._tool_to_server[tool.name] = name
-                logger.info("MCP server %r: %d tool(s) registered", name, len(result.tools))
-            except Exception as exc:
-                logger.warning("Failed to list tools from MCP server %r: %s", name, exc)
 
     async def get_tool_definitions(self) -> list[dict]:
         return list(self._schemas)
@@ -105,42 +95,91 @@ class MCPManager:
     # ------------------------------------------------------------------
 
     async def _hold_connection(self, srv: MCPServerConfig, ready: asyncio.Event) -> None:
-        try:
-            if srv.transport == "stdio":
-                if not srv.command:
-                    logger.warning("MCP server %r: stdio transport requires 'command'", srv.name)
-                    ready.set()
-                    return
-                params = StdioServerParameters(command=srv.command[0], args=srv.command[1:])
-                transport_cm = stdio_client(params)
-            elif srv.transport == "http":
-                if not srv.url:
-                    logger.warning("MCP server %r: http transport requires 'url'", srv.name)
-                    ready.set()
-                    return
-                sse_url = srv.url.rstrip("/") + "/sse"
-                transport_cm = sse_client(sse_url)
-            else:
-                logger.warning("MCP server %r: unknown transport %r", srv.name, srv.transport)
+        """Connect to one MCP server and hold the session open.
+
+        Retries with backoff if the initial connection fails (e.g. Hub starts before
+        the Node MCP server is up) or if the connection drops later.  Tool schemas are
+        re-registered on every successful (re)connect.
+        """
+        # Validate config once up front — no point retrying a misconfigured server.
+        if srv.transport == "stdio":
+            if not srv.command:
+                logger.warning("MCP server %r: stdio transport requires 'command'", srv.name)
                 ready.set()
                 return
+        elif srv.transport == "http":
+            if not srv.url:
+                logger.warning("MCP server %r: http transport requires 'url'", srv.name)
+                ready.set()
+                return
+        else:
+            logger.warning("MCP server %r: unknown transport %r", srv.name, srv.transport)
+            ready.set()
+            return
 
-            async with transport_cm as (read_stream, write_stream):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    self._sessions[srv.name] = session
-                    logger.info("Connected to MCP server: %s (%s)", srv.name, srv.transport)
-                    ready.set()
-                    # Hold the connection open until the task is cancelled.
-                    await asyncio.get_event_loop().create_future()
+        first_attempt = True
+        retry_delay = 10.0
 
-        except asyncio.CancelledError:
-            pass
-        except Exception as exc:
-            logger.warning("MCP server %r connection failed: %s", srv.name, exc)
-        finally:
-            ready.set()  # always unblock start() even on failure
-            self._sessions.pop(srv.name, None)
+        while True:
+            try:
+                if srv.transport == "stdio":
+                    params = StdioServerParameters(command=srv.command[0], args=srv.command[1:])
+                    transport_cm = stdio_client(params)
+                else:
+                    sse_url = srv.url.rstrip("/") + "/sse"
+                    transport_cm = sse_client(sse_url)
+
+                async with transport_cm as (read_stream, write_stream):
+                    async with ClientSession(read_stream, write_stream) as session:
+                        await session.initialize()
+                        self._sessions[srv.name] = session
+                        await self._register_schemas(srv.name, session)
+                        if first_attempt:
+                            logger.info("Connected to MCP server: %s (%s)", srv.name, srv.transport)
+                            first_attempt = False
+                            ready.set()
+                        else:
+                            logger.info("Reconnected to MCP server: %s", srv.name)
+                        # Hold connection open until cancelled or broken.
+                        await asyncio.get_event_loop().create_future()
+
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                if first_attempt:
+                    logger.warning(
+                        "MCP server %r: initial connection failed (%s) — retrying every %.0fs",
+                        srv.name, exc, retry_delay,
+                    )
+                    first_attempt = False
+                    ready.set()  # unblock start() — Hub proceeds without this server for now
+                else:
+                    logger.debug("MCP server %r: connection lost (%s) — retrying", srv.name, exc)
+            finally:
+                self._sessions.pop(srv.name, None)
+
+            # Exponential backoff, capped at 60 s
+            try:
+                await asyncio.sleep(retry_delay)
+            except asyncio.CancelledError:
+                return
+            retry_delay = min(retry_delay * 1.5, 60.0)
+
+    async def _register_schemas(self, server_name: str, session) -> None:
+        """Fetch tool list from a session and update _schemas / _tool_to_server."""
+        # Remove stale entries for this server before re-adding.
+        self._schemas = [
+            s for s in self._schemas
+            if self._tool_to_server.get(s["function"]["name"]) != server_name
+        ]
+        self._tool_to_server = {
+            k: v for k, v in self._tool_to_server.items() if v != server_name
+        }
+        result = await session.list_tools()
+        for tool in result.tools:
+            self._schemas.append(self._to_ollama_schema(tool))
+            self._tool_to_server[tool.name] = server_name
+        logger.info("MCP server %r: %d tool(s) registered", server_name, len(result.tools))
 
     @staticmethod
     def _to_ollama_schema(tool) -> dict:
