@@ -71,13 +71,19 @@ tools:
   #
   # MCP servers — connect to any MCP-compatible server.
   # Requires: pip install 'coremind[tools]'
+  #
+  # To enable voice-controlled music and ATC streaming on the Pi, uncomment
+  # the 'node' entry below and set the Pi's Tailscale IP.
+  # Without this, the LLM cannot see the Node's music/ATC tools even if the
+  # Pi's node_mcp server is running.
+  #
   # mcp_servers:
   #   - name: filesystem        # stdio transport: spawn a local subprocess
   #     transport: stdio
   #     command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
-  #   - name: node              # http transport: connect to Pi's Node MCP server
+  #   - name: node              # REQUIRED for music + ATC tools on the Pi
   #     transport: http
-  #     url: http://100.x.x.x:8767   # replace with Pi's Tailscale IP
+  #     url: http://100.x.x.x:8767   # replace with Pi's Tailscale IP (tailscale ip -4)
 
 remote_brain:
   enabled: false   # Hub does not forward to another Hub

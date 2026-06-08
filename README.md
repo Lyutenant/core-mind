@@ -554,6 +554,36 @@ You: Runway 1C and 19C
 CoreMind: Streaming KIAD Tower Runway 1C/19C (120.250 MHz).
 ```
 
+**Setup**
+
+```bash
+# On the Pi:
+sudo apt install mpv           # audio player (same as music)
+pip install 'coremind[tools]'  # mcp SDK
+
+# On the Hub (Mac Mini):
+pip install 'coremind[tools]'  # mcp SDK
+```
+
+**Node `config.yaml`** (Pi):
+```yaml
+node_mcp:
+  enabled: true          # must be true to expose ATC tools to the Hub
+  port: 8767
+  atc_catalog_path: ~/.coremind/atc-catalog.json
+```
+
+**Hub `config.yaml`** (Mac Mini):
+```yaml
+tools:
+  mcp_servers:
+    - name: node
+      transport: http
+      url: http://100.x.x.x:8767   # replace with Pi's Tailscale IP
+```
+
+Without the `mcp_servers` entry on the Hub, the LLM has no visibility into the ATC (or music) tools even if the Node MCP server is running.
+
 **Build the ATC catalog**
 
 Most airports use standard mount names that can be auto-discovered:
@@ -574,13 +604,6 @@ coremind atc add KIAD "Tower Runway 1R/19L" kiad1_twr_1r19l_119850 --freq 119.85
 ```
 
 The catalog is saved to `~/.coremind/atc-catalog.json`. Re-run `atc scan` whenever you want to add more airports.
-
-**Node `config.yaml`:**
-```yaml
-node_mcp:
-  enabled: true
-  atc_catalog_path: ~/.coremind/atc-catalog.json
-```
 
 **Available tools (4):**
 

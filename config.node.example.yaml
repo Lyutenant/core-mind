@@ -109,8 +109,14 @@ tools:
   built_in: [time, weather, aviation_weather, airport]
   # mcp_servers: []   # MCP servers to connect to at startup (requires pip install 'coremind[tools]')
 
-# Node MCP server — exposes Pi-local capabilities (music, volume) to the Hub's LLM.
-# Requires: pip install 'coremind[tools]' and sudo apt install mpv
+# Node MCP server — exposes Pi-local capabilities (music, ATC, volume) to the Hub's LLM.
+# Requires on Pi:  pip install 'coremind[tools]'  and  sudo apt install mpv
+# Requires on Hub: pip install 'coremind[tools]'  and the 'node' mcp_servers entry in Hub config.yaml
+#
+# After enabling, also update Hub config.yaml tools.mcp_servers:
+#   - name: node
+#     transport: http
+#     url: http://<this-pi-tailscale-ip>:8767
 node_mcp:
   enabled: false       # set true to expose music/volume/ATC tools to the Hub
   port: 8767
@@ -118,4 +124,4 @@ node_mcp:
   catalog_path: ~/.coremind/music-catalog.json   # run 'coremind music scan' to build
   atc_catalog_path: ~/.coremind/atc-catalog.json # run 'coremind atc scan KEWR KJFK' to build
   # For airports with non-standard LiveATC mounts, add them manually:
-  #   coremind atc add KIAD "Tower" kiad1_twr_1c19c_120250 --freq 120.250 --airport-name "Washington Dulles"
+  #   coremind atc add KIAD "Tower Runway 1C/19C" kiad1_twr_1c19c_120250 --freq 120.250
