@@ -846,15 +846,29 @@ def music_scan() -> None:
 # ATC commands
 # ---------------------------------------------------------------------------
 
+# Bare mounts — probed as {icao}{variant} (no underscore).
+# Small GA airports (unicom/ctaf) often use just the ICAO code or a number.
+_ATC_BARE_VARIANTS = ["", "1", "2", "3"]
+
+# Suffixed mounts — probed as {icao}_{suffix}.
 _ATC_SUFFIXES = [
-    "twr", "gnd", "app", "app_n", "app_s", "dep", "del",
-    "atis", "ramp", "unicom", "ctaf",
+    "twr", "twr2",
+    "gnd", "gnd2",
+    "app", "app_n", "app_s", "app2",
+    "dep", "dep2",
+    "del",
+    "atis",
+    "ramp",
+    "unicom",
+    "ctaf",
 ]
 
 _SUFFIX_NAMES = {
-    "twr": "Tower", "gnd": "Ground", "app": "Approach",
-    "app_n": "Approach North", "app_s": "Approach South",
-    "dep": "Departure", "del": "Delivery", "atis": "ATIS",
+    "twr": "Tower", "twr2": "Tower #2",
+    "gnd": "Ground", "gnd2": "Ground #2",
+    "app": "Approach", "app_n": "Approach North", "app_s": "Approach South", "app2": "Approach #2",
+    "dep": "Departure", "dep2": "Departure #2",
+    "del": "Delivery", "atis": "ATIS",
     "ramp": "Ramp", "unicom": "Unicom", "ctaf": "CTAF",
 }
 
@@ -902,8 +916,17 @@ def atc_scan(
             airport_name = db_info["name"] if db_info else ""
         console.print(f"\n[bold]{icao}[/bold]{' — ' + airport_name if airport_name else ''}")
 
+        # Build the full list of mounts to probe for this airport.
+        # Bare variants first (kjyo, kjyo1, kjyo2 …) — common for small GA airports
+        # with a single unicom/ctaf feed. Then suffixed variants (kjyo_twr, …).
+        icao_lower = icao.lower()
+        mounts_to_probe: list[tuple[str, str]] = []
+        for variant in _ATC_BARE_VARIANTS:
+            mounts_to_probe.append((f"{icao_lower}{variant}", ""))
         for suffix in _ATC_SUFFIXES:
-            mount = f"{icao.lower()}_{suffix}"
+            mounts_to_probe.append((f"{icao_lower}_{suffix}", suffix))
+
+        for mount, suffix in mounts_to_probe:
             pls_url = f"https://www.liveatc.net/play/{mount}.pls"
             try:
                 r = httpx.get(pls_url, timeout=8.0, follow_redirects=True)
@@ -912,8 +935,8 @@ def atc_scan(
                 valid = False
 
             if valid:
-                # Parse Title1= from .pls for a human-readable name
-                name = _SUFFIX_NAMES.get(suffix, suffix.upper())
+                # Parse Title1= from .pls for a human-readable channel name
+                name = _SUFFIX_NAMES.get(suffix, suffix.upper()) if suffix else icao
                 for line in r.text.splitlines():
                     if line.startswith("Title1="):
                         raw = line.split("=", 1)[1].strip()
