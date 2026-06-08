@@ -584,29 +584,38 @@ tools:
 
 Without the `mcp_servers` entry on the Hub, the LLM has no visibility into the ATC (or music) tools even if the Node MCP server is running.
 
-**Build the ATC catalog (run on the Pi)**
+**Default catalog — works out of the box**
 
-The catalog is built and stored on the Pi — run these commands in a terminal on the Raspberry Pi (or over SSH).
+CoreMind ships with a bundled catalog of 397 channels across 16 airports (KEWR, KJFK, KLGA, KTEB, KIAD, KDCA, KJYO, KAPA, KBOS, KORD, KATL, KLAX, KSFO, KSEA, KMIA, ZNY). If no user catalog exists at `~/.coremind/atc-catalog.json`, the Node MCP server loads this default automatically — no setup needed for these airports.
 
-Most airports use standard mount names that can be auto-discovered:
+**Adding more airports (run on the Pi)**
+
+For airports with standard mount names, scan discovers them automatically:
 
 ```bash
 # SSH into the Pi, then:
-coremind atc scan KEWR KJFK KLGA KDCA KJYO
-# ✓  kewr_twr  Newark Liberty Tower
-# ✓  kewr_gnd  Newark Liberty Ground
-# ✓  kewr_app  Newark Liberty Approach
+coremind atc scan KBWI KPHL KPDK
+# ✓  kbwi_twr  BWI Tower
+# ✓  kbwi_gnd  BWI Ground
 # ...
 ```
 
-Some busy airports use obfuscated mount names that can't be guessed. Add those manually with a descriptive channel name so disambiguation works. Airport names are auto-filled from the bundled ICAO database — no `--airport-name` flag needed for known airports:
+For airports with obfuscated mount names (KIAD-style), LiveATC's search page must be visited in a browser. `atc js` walks you through the process:
 
 ```bash
-coremind atc add KIAD "Tower Runway 1C/19C" kiad1_twr_1c19c_120250 --freq 120.250
-coremind atc add KIAD "Tower Runway 1R/19L" kiad1_twr_1r19l_119850 --freq 119.850
+coremind atc js      # prints step-by-step instructions + JS snippet path
 ```
 
-The catalog is saved to `~/.coremind/atc-catalog.json` on the Pi. Re-run `atc scan` whenever you want to add more airports. The Node MCP server picks up catalog changes automatically on the next tool call — no restart needed.
+1. Open `https://www.liveatc.net/search/?icao=KXXX` in your browser
+2. Open DevTools → Console, paste the JS snippet shown by `atc js`
+3. Copy the JSON output and save it to a file, e.g. `~/browser-mounts.json`
+4. Scan with the file — CoreMind validates each mount and adds the working ones:
+
+```bash
+coremind atc scan KXXX --browser-mounts ~/browser-mounts.json
+```
+
+The catalog is saved to `~/.coremind/atc-catalog.json`. The Node MCP server picks up changes automatically on the next tool call — no restart needed.
 
 **Available tools (4):**
 
@@ -616,12 +625,6 @@ The catalog is saved to `~/.coremind/atc-catalog.json` on the Pi. Re-run `atc sc
 | `list_atc_airports` | "What airports do you have ATC for?" |
 | `list_atc_channels` | "What ATC channels do you have for Newark?" |
 | `stop_atc` | "Stop the ATC" |
-
-**Finding obfuscated mount names**
-
-Standard airports: `{ICAO}_{suffix}` — discoverable with `atc scan`.
-
-For complex airports, use your browser's DevTools: open the streaming page, go to the Network tab, press Play on the desired channel, and look for an audio stream request. The path component of that URL is the mount name. Use a descriptive channel name (e.g. `"Tower Runway 1C/19C"`) so CoreMind can disambiguate it by voice.
 
 ---
 
@@ -742,8 +745,10 @@ coremind chat once                      # single push-to-talk turn
 # Music library (Node)
 coremind music scan                     # scan music_dir and rebuild catalog
 
-# ATC streams (Node)
-coremind atc scan KEWR KJFK KLGA       # auto-discover standard ATC mounts
+# ATC streams (Node) — default catalog ships with 397 channels across 16 airports
+coremind atc scan KBWI KPHL            # auto-discover more airports
+coremind atc js                         # instructions for obfuscated-mount airports
+coremind atc scan KXXX --browser-mounts ~/browser-mounts.json  # scan with browser data
 coremind atc add KIAD "Tower" kiad1_twr_1c19c_120250 --freq 120.250  # manual entry
 
 # Diagnostics — any device
