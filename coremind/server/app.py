@@ -158,6 +158,9 @@ def _get_dispatcher():
                 taf_airport=s.app.taf_airport,
             )
             logger.info("Tools loaded: %s", s.tools.built_in)
+        # Re-attach the MCP manager if one is already running (survives config reloads).
+        if _mcp_manager is not None:
+            _dispatcher.set_mcp_manager(_mcp_manager)
     return _dispatcher
 
 
