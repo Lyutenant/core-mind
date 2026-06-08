@@ -846,43 +846,65 @@ def music_scan() -> None:
 # ATC commands
 # ---------------------------------------------------------------------------
 
+_ATC_JS_SNIPPET = Path(__file__).parent / "data" / "extract-liveatc-mounts.js"
+
 # Bare mounts — probed as {icao}{variant} (no underscore).
 # Small GA airports (unicom/ctaf) often use just the ICAO code or a number.
 _ATC_BARE_VARIANTS = ["", "1", "2", "3"]
 
 # Suffixed mounts — probed as {icao}_{suffix}.
+# Mirrors GUESSED_SUFFIXES from atc-hub/scripts/scrape-liveatc.py.
 _ATC_SUFFIXES = [
     "twr", "twr2",
-    "gnd", "gnd2",
-    "app", "app_n", "app_s", "app2",
-    "dep", "dep2",
-    "del",
+    "gnd", "gnd_twr", "gnd2",
+    "app", "app_n", "app_s", "app_e", "app_w", "app_final", "app_dep", "app2",
+    "dep", "dep_n", "dep_s", "dep2",
+    "del", "clnc_del",
     "atis",
     "ramp",
-    "unicom",
-    "ctaf",
+    "unicom", "ctaf", "ptd",
 ]
 
-_SUFFIX_NAMES = {
-    "twr": "Tower", "twr2": "Tower #2",
-    "gnd": "Ground", "gnd2": "Ground #2",
-    "app": "Approach", "app_n": "Approach North", "app_s": "Approach South", "app2": "Approach #2",
-    "dep": "Departure", "dep2": "Departure #2",
-    "del": "Delivery", "atis": "ATIS",
-    "ramp": "Ramp", "unicom": "Unicom", "ctaf": "CTAF",
-}
+_DEFAULT_ATC_CATALOG = Path(__file__).parent / "data" / "atc-catalog-default.json"
+
+import re as _re
+
+
+def _freq_from_mount(mount: str) -> str:
+    """Decode frequency from trailing numeric segment in mount name.
+
+    LiveATC encodes MHz by stripping the decimal point:
+      4 digits 1191   → 119.1 MHz
+      5 digits 12575  → 125.75 MHz
+      6 digits 120250 → 120.250 MHz
+    Segments of 1–3 digits are receiver IDs, not frequencies.
+    """
+    m = _re.search(r'_(\d{4,6})(?:_|$)', mount)
+    if m:
+        d = m.group(1)
+        return f"{d[:3]}.{d[3:]}"
+    return ""
 
 
 @atc_app.command("scan")
 def atc_scan(
     icaos: list[str] = typer.Argument(..., help="ICAO codes to scan, e.g. KEWR KJFK KIAD"),
+    browser_mounts: str = typer.Option(
+        "", "--browser-mounts", "-b",
+        help="Path to browser-extracted mounts JSON (output of 'coremind atc js')."
+    ),
     airport_names: str = typer.Option("", "--names", help="Override airport names (comma-separated, matched by order)"),
     rate: float = typer.Option(1.0, "--rate", "-r", help="Requests per second (default: 1.0)"),
 ) -> None:
-    """Probe for standard ATC streams and add them to the catalog.
+    """Probe LiveATC for available streams and add them to the catalog.
+
+    Probes two sets of candidates per airport:
+      1. Browser-extracted mounts (--browser-mounts FILE) — authoritative for airports
+         with obfuscated mount names (e.g. KIAD). See 'coremind atc js' for instructions.
+      2. Guessed suffixes (twr, gnd, app …) — catches standard simple-name airports.
 
     Airport names are looked up automatically from the bundled ICAO database.
-    Use --names to override. Use 'coremind atc add' for non-standard (obfuscated) mounts.
+    Use 'coremind atc add' to manually add a single channel.
     """
     import time
 
@@ -891,7 +913,6 @@ def atc_scan(
     from coremind.airports import lookup_icao
     from coremind.node_mcp.atc_catalog import (
         ATCCatalog,
-        empty_catalog,
         load_atc_catalog,
         save_atc_catalog,
     )
@@ -899,16 +920,57 @@ def atc_scan(
     settings = _get_settings()
     catalog_path = Path(settings.node_mcp.atc_catalog_path).expanduser()
 
-    data = load_atc_catalog(catalog_path) or empty_catalog()
+    # Seed from user catalog, then bundled default, then empty
+    data = (
+        load_atc_catalog(catalog_path)
+        or load_atc_catalog(_DEFAULT_ATC_CATALOG)
+        or {"version": 1, "channels": []}
+    )
     catalog = ATCCatalog(data)
+
+    # Load browser-extracted mounts: {ICAO_UPPER: [mount, ...]}
+    browser: dict[str, list[str]] = {}
+    if browser_mounts.strip():
+        bm_path = Path(browser_mounts).expanduser()
+        try:
+            raw: list[dict] = __import__("json").loads(bm_path.read_text())
+            for entry in raw:
+                mount = entry.get("mount", "").strip()
+                icao_key = entry.get("icao", "").strip().upper()
+                if mount and icao_key:
+                    browser.setdefault(icao_key, [])
+                    if mount not in browser[icao_key]:
+                        browser[icao_key].append(mount)
+            total_bm = sum(len(v) for v in browser.values())
+            console.print(f"[dim]Browser mounts loaded: {total_bm} across {len(browser)} airports[/dim]")
+        except Exception as exc:
+            console.print(f"[yellow]Warning:[/yellow] could not load {bm_path}: {exc}")
 
     name_overrides = [n.strip() for n in airport_names.split(",") if n.strip()]
     delay = 1.0 / max(rate, 0.1)
 
+    def probe(mount: str) -> tuple[bool, str]:
+        """Return (valid, title). Rate-limited."""
+        pls_url = f"https://www.liveatc.net/play/{mount}.pls"
+        try:
+            r = httpx.get(pls_url, timeout=8.0, follow_redirects=True,
+                          headers={"User-Agent": "Mozilla/5.0"})
+            body = r.text.strip()
+            if r.status_code == 200 and body.startswith("[playlist]"):
+                title = ""
+                for line in body.splitlines():
+                    if line.startswith("Title1="):
+                        title = line.split("=", 1)[1].strip()
+                        break
+                return True, title
+        except Exception:
+            pass
+        time.sleep(delay)
+        return False, ""
+
     total_new = 0
     for i, icao in enumerate(icaos):
         icao = icao.upper().strip()
-        # Prefer explicit override, fall back to bundled database
         if i < len(name_overrides):
             airport_name = name_overrides[i]
         else:
@@ -916,54 +978,78 @@ def atc_scan(
             airport_name = db_info["name"] if db_info else ""
         console.print(f"\n[bold]{icao}[/bold]{' — ' + airport_name if airport_name else ''}")
 
-        # Build the full list of mounts to probe for this airport.
-        # Bare variants first (kjyo, kjyo1, kjyo2 …) — common for small GA airports
-        # with a single unicom/ctaf feed. Then suffixed variants (kjyo_twr, …).
         icao_lower = icao.lower()
-        mounts_to_probe: list[tuple[str, str]] = []
-        for variant in _ATC_BARE_VARIANTS:
-            mounts_to_probe.append((f"{icao_lower}{variant}", ""))
+        seen: set[str] = set()
+
+        # Build ordered candidate list: browser mounts first, then bare variants, then suffixes
+        candidates: list[str] = []
+        for m in browser.get(icao, []):
+            if m not in seen:
+                seen.add(m)
+                candidates.append(m)
+        for v in _ATC_BARE_VARIANTS:
+            m = f"{icao_lower}{v}"
+            if m not in seen:
+                seen.add(m)
+                candidates.append(m)
         for suffix in _ATC_SUFFIXES:
-            mounts_to_probe.append((f"{icao_lower}_{suffix}", suffix))
+            m = f"{icao_lower}_{suffix}"
+            if m not in seen:
+                seen.add(m)
+                candidates.append(m)
 
-        for mount, suffix in mounts_to_probe:
-            pls_url = f"https://www.liveatc.net/play/{mount}.pls"
-            try:
-                r = httpx.get(pls_url, timeout=8.0, follow_redirects=True)
-                valid = r.status_code == 200 and r.text.strip().startswith("[playlist]")
-            except Exception:
-                valid = False
-
+        for mount in candidates:
+            valid, title = probe(mount)
             if valid:
-                # Parse Title1= from .pls for a human-readable channel name
-                name = _SUFFIX_NAMES.get(suffix, suffix.upper()) if suffix else icao
-                for line in r.text.splitlines():
-                    if line.startswith("Title1="):
-                        raw = line.split("=", 1)[1].strip()
-                        if raw:
-                            name = raw
-                        break
-
+                name = title or mount
+                freq = _freq_from_mount(mount)
                 channel: dict = {
                     "airport": icao,
                     "airport_name": airport_name,
                     "name": name,
                     "mount": mount,
                 }
+                if freq:
+                    channel["freq"] = freq
                 is_new = catalog.upsert_channel(channel)
                 if is_new:
                     total_new += 1
-                console.print(f"  [green]✓[/green]  {mount}  {name}")
+                freq_str = f"  [dim]{freq} MHz[/dim]" if freq else ""
+                console.print(f"  [green]✓[/green]  {mount}  {name}{freq_str}")
             else:
                 console.print(f"  [dim]✗  {mount}[/dim]")
-
-            time.sleep(delay)
 
     save_atc_catalog(catalog.to_dict(), catalog_path)
     console.print(
         f"\n[green]Catalog saved:[/green] {catalog_path}\n"
         f"  {total_new} new channel(s) added."
     )
+
+
+@atc_app.command("js")
+def atc_js() -> None:
+    """Show instructions for extracting LiveATC mounts from your browser.
+
+    For airports with obfuscated mount names (e.g. KIAD, KDCA), LiveATC's
+    search pages must be opened in a browser. A JavaScript snippet extracts
+    all stream links from the page.
+    """
+    js_path = _ATC_JS_SNIPPET
+    console.print("\n[bold]Step 1 — Open LiveATC in your browser[/bold]")
+    console.print("  Go to: https://www.liveatc.net/search/?icao=KIAD")
+    console.print("  (replace KIAD with the airport you want)\n")
+    console.print("[bold]Step 2 — Run the JavaScript snippet[/bold]")
+    console.print("  Open DevTools → Console, paste the contents of:")
+    console.print(f"  [cyan]{js_path}[/cyan]\n")
+    console.print("[bold]Step 3 — Save the output[/bold]")
+    console.print("  Copy the JSON printed in the console and save it to a file,")
+    console.print("  e.g. ~/browser-mounts.json. Repeat for each airport, appending")
+    console.print("  to the same file (it's a JSON array).\n")
+    console.print("[bold]Step 4 — Run atc scan with the file[/bold]")
+    console.print("  [green]coremind atc scan KIAD KDCA --browser-mounts ~/browser-mounts.json[/green]\n")
+    if js_path.exists():
+        console.print(f"[dim]JS snippet ({js_path.stat().st_size} bytes):[/dim]")
+        console.print(js_path.read_text())
 
 
 @atc_app.command("add")

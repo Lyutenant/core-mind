@@ -54,7 +54,7 @@ where = ["."]
 include = ["coremind*"]
 
 [tool.setuptools.package-data]
-coremind = ["data/*.json"]
+coremind = ["data/*.json", "data/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["coremind/tests"]

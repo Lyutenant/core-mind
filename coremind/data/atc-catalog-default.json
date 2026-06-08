@@ -1,0 +1,2500 @@
+{
+  "version": 1,
+  "channels": [
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "ATIS",
+      "mount": "kewr_atis"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Clearance Delivery",
+      "mount": "kewr_del"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Ground",
+      "mount": "kewr_gnd_pri"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Ramp/Company/Misc",
+      "mount": "kewr_co"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Tower #1",
+      "mount": "kewr_twr",
+      "freq": "118.30"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Tower #2",
+      "mount": "kewr_twr_sf1"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Tower (TCA)",
+      "mount": "kewr_twr_tca"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Tower/TCA/Backup",
+      "mount": "kewr_twr_bu_tca"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "New York Approach (EMPYR)",
+      "mount": "kewr_klga_app_empyr"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Apporach (N. Arrival)",
+      "mount": "kewr_app_n"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Approach (EWR Final)",
+      "mount": "kewr_app_final"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Approach (MUGZY Sector)",
+      "mount": "kewr_app_mugzy"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Approach (N. Arrival Backup)",
+      "mount": "kewr_app_n_arr2"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Approach (North Arrival Alt)",
+      "mount": "kewr_app_135575",
+      "freq": "135.575"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Departure #1",
+      "mount": "kewr_dep",
+      "freq": "119.20"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Departure #2",
+      "mount": "kewr_dep2"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Departure #3",
+      "mount": "kewr_dep_125850",
+      "freq": "125.850"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Departure (Liberty South)",
+      "mount": "kewr_dep_lib_s"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Newark Departure (Liberty West)",
+      "mount": "kewr_dep_lib_w"
+    },
+    {
+      "airport": "KEWR",
+      "airport_name": "Newark Liberty International Airport",
+      "name": "Tower (Temp Feed)",
+      "mount": "kewr_twr2"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ARINC (JFK/LGA Area)",
+      "mount": "kjfk_arinc"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Clearance Delivery #1",
+      "mount": "kjfk_del3"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Clearance Delivery #2",
+      "mount": "kjfk_del2"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Company/Ramp",
+      "mount": "kjfk_co"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "D-ATIS",
+      "mount": "kjfk_atis"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Gnd/Twr",
+      "mount": "kjfk9_s"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Ground #1",
+      "mount": "kjfk9_gnd"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Ground #2",
+      "mount": "kjfk_gnd"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Tower",
+      "mount": "kjfk_twr",
+      "freq": "119.10"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Tower #2",
+      "mount": "kjfk_twr3"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Tower #3",
+      "mount": "kjfk9_twr"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Tower 119.1",
+      "mount": "kjfk_twr_1191",
+      "freq": "119.1"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Tower 123.9",
+      "mount": "kjfk_twr_1239",
+      "freq": "123.9"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Approach (CAMRN/JFK) #1",
+      "mount": "kjfk9_app_camrn"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Approach (CAMRN/JFK) #2",
+      "mount": "kjfk_bw_app_camrn"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Approach (CAMRN/JFK) #3",
+      "mount": "kjfk_118_app_camrn"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Approach (Final/JFK) #1",
+      "mount": "kjfk_bw_app_final"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Approach (Final/JFK) #2",
+      "mount": "kjfk_118_app_final"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Approach (ROBER/JFK #1)",
+      "mount": "kjfk9_app_rober"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Approach (ROBER/JFK #2)",
+      "mount": "kjfk_app_rober"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Dep (Liberty North) #1",
+      "mount": "khpn_app_lib_n"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Dep (Liberty North) #2",
+      "mount": "ny_app_lib_north"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Departure (JFK)",
+      "mount": "kjfk_dep",
+      "freq": "135.90"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZBW Boston Center (CLIPR32)",
+      "mount": "zbw_ccc1"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZBW Boston Center (HTO31)",
+      "mount": "zbw_ccc2"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZBW Boston Center (SOUTHIE49)",
+      "mount": "zbw_ccc_southie"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZBW Sector 19 Danbury Low",
+      "mount": "kfrg_ron45_zbw_134000",
+      "freq": "134.000"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZBW/ZNY/ZDC (JFK Area) #1",
+      "mount": "zbw_ron1"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZBW/ZNY/ZDC (JFK Area) #2",
+      "mount": "zbw_ron2"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZBW/ZNY/ZDC (JFK Area) #3",
+      "mount": "zbw_ron3"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZBW/ZNY/ZDC (JFK Area) #4",
+      "mount": "zbw_ron4"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZNY Misc (NE PA)",
+      "mount": "zbw_ron5"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZNY Sector 56 (Kennedy)",
+      "mount": "zny_col_ken"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "ZNY Sector 67 (Dixie)",
+      "mount": "zny_col_dix"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Gnd/Twr #1",
+      "mount": "kjfk_gnd_twr",
+      "freq": "121.90"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "NY Approach (Final/JFK) #2",
+      "mount": "kjfk_app_final",
+      "freq": "132.40"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Clearance Delivery",
+      "mount": "kjfk_del",
+      "freq": "135.95"
+    },
+    {
+      "airport": "KJFK",
+      "airport_name": "John F. Kennedy International Airport",
+      "name": "Tower #2",
+      "mount": "kjfk_twr2"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "ATIS (Departure) #1",
+      "mount": "klga_118_atis_dep"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "ATIS (Departure) #2",
+      "mount": "klga_atis_dep"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "Clearance Delivery",
+      "mount": "klga_118_del"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "Del/ARINC/TCA",
+      "mount": "klga_del"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "Ground #1",
+      "mount": "klga_gnd",
+      "freq": "121.70"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "Ground #2",
+      "mount": "klga_118_gnd"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "NY App (Final) #2",
+      "mount": "klga_final2"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "NY App (HAARP) #1",
+      "mount": "klga_ny_app"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "NY App (HAARP) #2",
+      "mount": "klga_118_app_haarp"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "NY Dep",
+      "mount": "klga_ny_dep"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "NY Dep 135.35",
+      "mount": "klga_118_dep_135350",
+      "freq": "135.350"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "Tower #1",
+      "mount": "klga_twr",
+      "freq": "118.70"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "Tower #2",
+      "mount": "klga_118_twr"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "Tower (TCA/Heli)",
+      "mount": "klga_twr2"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "New York Approach (EMPYR)",
+      "mount": "kewr_klga_app_empyr"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "NY Dep (Liberty North) #1",
+      "mount": "khpn_app_lib_n"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "NY Dep (Liberty North) #2",
+      "mount": "ny_app_lib_north"
+    },
+    {
+      "airport": "KLGA",
+      "airport_name": "LaGuardia Airport",
+      "name": "ZNY Sector 86 (121.125)",
+      "mount": "klga_118_zny86"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "ATIS",
+      "mount": "kteb_es_atis"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Clearance Delivery #1",
+      "mount": "kteb_es_del"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Clearance Delivery #2",
+      "mount": "kteb_es_del_r"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Del/Gnd/Ramp",
+      "mount": "kteb1"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "FBOs",
+      "mount": "kteb_es_fbos"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Ground #1",
+      "mount": "kteb_es_gnd_r"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Ground #2",
+      "mount": "kteb_es_gnd"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Ops",
+      "mount": "kteb_es_ops"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Ramp Control",
+      "mount": "kteb_es_ramp"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Tower #1",
+      "mount": "kteb_es_twr_r"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Tower #2",
+      "mount": "kteb_es_twr"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Tower (Secondary)",
+      "mount": "kteb_es_twr2"
+    },
+    {
+      "airport": "KTEB",
+      "airport_name": "Teterboro Airport",
+      "name": "Tower #3",
+      "mount": "kteb_twr",
+      "freq": "119.50"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 55 (Yardley Backup)",
+      "mount": "kabe1_zny_123825"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 92 (Pottstown Low)",
+      "mount": "kabe1_zny92"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sectors 39/55 (Parke/Yardley)",
+      "mount": "kabe1_zny39_55"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "ATL86/ZDC SIE54",
+      "mount": "zdc59_zny86_acy"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 34 Elmira High",
+      "mount": "kbgm1_zny34"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 35 Huguenot Low",
+      "mount": "kbgm1_zny35"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 36 Sparta Low",
+      "mount": "kbgm1_zny36"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 50 Binghamton Low",
+      "mount": "kbgm1_zny50"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 51 Lake Henry Low",
+      "mount": "kbgm1_zny51"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "JOBOC Sector",
+      "mount": "kfmh1_zny_joboc"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 83 HANRI",
+      "mount": "zny_ilm_hanri"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 49",
+      "mount": "kipt1_zny49"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 74",
+      "mount": "kipt1_zny_74"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 91",
+      "mount": "kipt1_zny_91"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sectors 74/92",
+      "mount": "kipt1_zny_74_92"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "ZBW/ZNY/ZDC (JFK Area) #1",
+      "mount": "zbw_ron1"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "ZBW/ZNY/ZDC (JFK Area) #2",
+      "mount": "zbw_ron2"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "ZBW/ZNY/ZDC (JFK Area) #3",
+      "mount": "zbw_ron3"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "ZBW/ZNY/ZDC (JFK Area) #4",
+      "mount": "zbw_ron4"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Misc (NE PA)",
+      "mount": "zbw_ron5"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 56 (Kennedy)",
+      "mount": "zny_col_ken"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 67 (Dixie)",
+      "mount": "zny_col_dix"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 86 (121.125)",
+      "mount": "klga_118_zny86"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "New York Center Sector 10",
+      "mount": "kmdt1_zny10"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "New York Center Sector 26",
+      "mount": "kmdt1_zny26"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "New York Center Sector 27",
+      "mount": "kmdt1_zny27"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "New York Center Sector 8",
+      "mount": "kmdt1_zny08"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 25 (Modena)",
+      "mount": "koqn1_zny25"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "KUNV Gnd/Twr",
+      "mount": "kunv"
+    },
+    {
+      "airport": "ZNY",
+      "airport_name": "New York Center",
+      "name": "Sector 73",
+      "mount": "kunv_ctr_1"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "App (North Arr Hi)",
+      "mount": "kmrb1_kiad_n_arr"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "ATIS",
+      "mount": "kiad1_atis"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Clearance Delivery",
+      "mount": "kiad1_del"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Clearance/Ground West (Backup)",
+      "mount": "kiad1_spare_124075",
+      "freq": "124.075"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "De-Ice #1",
+      "mount": "kiad1_ice_129175",
+      "freq": "129.175"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Dulles Ops",
+      "mount": "kiad1_ops"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "FBO (Atlantic)",
+      "mount": "kiad1_fbo_atl_129775",
+      "freq": "129.775"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "FBO (Signature)",
+      "mount": "kiad1_fbo_sig_131875",
+      "freq": "131.875"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Ground (Center 1C/19C)",
+      "mount": "kiad1_gnd_ctr_132450",
+      "freq": "132.450"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Ground (East)",
+      "mount": "kiad1_gnd_east_121900",
+      "freq": "121.900"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Ground (spare)",
+      "mount": "kiad1_gnd_spare_121725",
+      "freq": "121.725"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Ground (West 1L/19R, 12/30)",
+      "mount": "kiad1_gnd_west_121625",
+      "freq": "121.625"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Ramp (Alternate)",
+      "mount": "kiad1_ramp_130550",
+      "freq": "130.550"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Ramp Control North",
+      "mount": "kiad1_ramp_119125",
+      "freq": "119.125"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Ramp Control South",
+      "mount": "kiad1_ramp_129550",
+      "freq": "129.550"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Tower (1C/19C)",
+      "mount": "kiad1_twr_1c19c_120250",
+      "freq": "120.250"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Tower (1L/19R, 12/30)",
+      "mount": "kiad1_twr_1l19r_134425",
+      "freq": "134.425"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Tower (1R/19L)",
+      "mount": "kiad1_twr_1r19l_120100",
+      "freq": "120.100"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Tower (Emergency)",
+      "mount": "kiad1_twr_emergency"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (BUFFR)",
+      "mount": "kiad1_app_buffr_133850",
+      "freq": "133.850"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (Final East)",
+      "mount": "kiad1_app_final_east_125800",
+      "freq": "125.800"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (Final East) #2",
+      "mount": "kiad2_app_fin_east"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (Final West)",
+      "mount": "kiad1_app_final_west_134200",
+      "freq": "134.200"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (LUCKE)",
+      "mount": "kiad1_app_lucke_126825",
+      "freq": "126.825"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (LURAY)",
+      "mount": "kiad1_app_luray_118675",
+      "freq": "118.675"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (North Arrival Hi)",
+      "mount": "kiad1_app_n_arr_binns_133000",
+      "freq": "133.000"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (North Arrival MULRR) #2",
+      "mount": "kiad2_app_arr_n"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach (RCOLA)",
+      "mount": "kiad1_app_rcola_135775",
+      "freq": "135.775"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach ADIZ West",
+      "mount": "kiad1_app_adiz_west_127325",
+      "freq": "127.325"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach SFRA West #2",
+      "mount": "kiad2_app_sfra_west"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach/Departure (BARIN)",
+      "mount": "kiad1_app_barin_128525",
+      "freq": "128.525"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach/Departure (MANNE)",
+      "mount": "kiad1_app_manne_120450",
+      "freq": "120.450"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Approach/Departure (MULRR)",
+      "mount": "kiad1_app_mulrr_126100",
+      "freq": "126.100"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Departure (North)",
+      "mount": "kiad1_dep_n_asper_125050",
+      "freq": "125.050"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Departure (North) #2",
+      "mount": "kiad2_dep_n"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Departure (South)",
+      "mount": "kiad1_dep_s_tilly_126650",
+      "freq": "126.650"
+    },
+    {
+      "airport": "KIAD",
+      "airport_name": "Washington Dulles International Airport",
+      "name": "Potomac Departure (South) #2",
+      "mount": "kiad2_dep_s"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Ground",
+      "mount": "kdca1_gnd"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Potomac App (LURAY)",
+      "mount": "kmrb1_app_luray"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Potomac App/Dep (FLUKY)",
+      "mount": "kdca1_dep_121050",
+      "freq": "121.050"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Potomac App/Dep (KRANT)",
+      "mount": "kdca1_dep_e"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Potomac Approach (DCA Final)",
+      "mount": "kdca1_app_final"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Potomac Approach (OJAAY Sector)",
+      "mount": "kdca1_app_119850",
+      "freq": "119.850"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Potomac Departure",
+      "mount": "kdca1_dep"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Tower",
+      "mount": "kdca1_twr"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Tower/Approach",
+      "mount": "kdca"
+    },
+    {
+      "airport": "KDCA",
+      "airport_name": "Ronald Reagan Washington National Airport",
+      "name": "Tower/KJPN Helicopter",
+      "mount": "kdca4_heli"
+    },
+    {
+      "airport": "KJYO",
+      "airport_name": "Leesburg Executive Airport",
+      "name": "AWOS",
+      "mount": "kjyo3_awos"
+    },
+    {
+      "airport": "KJYO",
+      "airport_name": "Leesburg Executive Airport",
+      "name": "Ground",
+      "mount": "kjyo3_gnd"
+    },
+    {
+      "airport": "KJYO",
+      "airport_name": "Leesburg Executive Airport",
+      "name": "Tower",
+      "mount": "kjyo3_twr"
+    },
+    {
+      "airport": "KJYO",
+      "airport_name": "Leesburg Executive Airport",
+      "name": "ZDC Guard Dog",
+      "mount": "kiad2_zdc_gd"
+    },
+    {
+      "airport": "KJYO",
+      "airport_name": "Leesburg Executive Airport",
+      "name": "ZDC Sectors 04",
+      "mount": "kiad2_zdc04_133975",
+      "freq": "133.975"
+    },
+    {
+      "airport": "KJYO",
+      "airport_name": "Leesburg Executive Airport",
+      "name": "ZDC Sectors 12",
+      "mount": "kiad2_zdc12_126875",
+      "freq": "126.875"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Denver App/Dep (South Satellite) #1",
+      "mount": "kapa1_es_app_132750",
+      "freq": "132.750"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Denver App/Dep (South Satellite) #2",
+      "mount": "kapa2_app"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "ATIS",
+      "mount": "kapa1_es_atis"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Clearance Delivery",
+      "mount": "kapa1_es_del"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Del/Gnd",
+      "mount": "kapa2_gnd"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Ground",
+      "mount": "kapa1_es_gnd"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Tower (Primary) #1",
+      "mount": "kapa1_es_twr1"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Tower (Primary) #2",
+      "mount": "kapa2_twr1"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Tower (Secondary #1) #1",
+      "mount": "kapa1_es_twr2"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Tower (Secondary #1) #2",
+      "mount": "kapa2_twr2"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Tower (Secondary #2) #1",
+      "mount": "kapa1_es_twr3"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Tower (Secondary #2) #2",
+      "mount": "kapa2_twr3"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "UNICOM",
+      "mount": "kapa1_es_unicom"
+    },
+    {
+      "airport": "KAPA",
+      "airport_name": "Centennial Airport",
+      "name": "Tower",
+      "mount": "kapa_twr",
+      "freq": "118.90"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Boston App/Dep (North/High)",
+      "mount": "kbos1_app_north"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Boston App/Dep (South)",
+      "mount": "kbos1_app_south"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Boston Approach (Final Vector)",
+      "mount": "kbos1_app_fin1"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Boston Departure (Initial)",
+      "mount": "kbos1_dep_133000",
+      "freq": "133.000"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ATIS",
+      "mount": "kbos1_atis"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Clearance Delivery",
+      "mount": "kbos1_del"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Gate",
+      "mount": "kbos1_gate"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Ground",
+      "mount": "kbos1_gnd_121900",
+      "freq": "121.900"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Massport Gate",
+      "mount": "kbos1_massportgate"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Tower",
+      "mount": "kbos1_twr"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Tower (Heli/Skyways)",
+      "mount": "kbos1_twr_heli"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (ALB22)",
+      "mount": "kalb2_zbw_alb22"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (ALB22/CAM39)",
+      "mount": "kgfl1_zbw_121350_128325",
+      "freq": "121.350"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (ATH38 High/CT Site)",
+      "mount": "kbdl2_zbw_ath_hi"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (ATH38/NY)",
+      "mount": "kgfl1_zbw_135325",
+      "freq": "135.325"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (BOS46 High) #2",
+      "mount": "kbdl2_zbw_bos_hi"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (BOS47 Low)",
+      "mount": "kbdl2_zbw_bos_low"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (CAM39)",
+      "mount": "kgfl1_zbw_128325",
+      "freq": "128.325"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (CANAN21/BOS46)",
+      "mount": "zbw_can21_bos46"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (CON37)",
+      "mount": "zbw_con"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (GDM36)",
+      "mount": "zbw_gdm"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (GDM36/CON37) #1",
+      "mount": "zbw_gdm_con"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (IGN20)",
+      "mount": "zbw20_hvn"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (MPV52/PLB53) #1",
+      "mount": "zbw_mpv"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (MPV52/PLB53) #2",
+      "mount": "zbw_mpv2"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (PVD34 Low)",
+      "mount": "kbdl2_zbw_pvd_low"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (PWL06)",
+      "mount": "zbw06_hvn"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (RKA10)",
+      "mount": "zbw_remsen"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "ZBW Boston Center (UCA09/ART08)",
+      "mount": "zbw_turin"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Tower",
+      "mount": "kbos_twr",
+      "freq": "128.80"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Del/Gnd",
+      "mount": "kbos_gnd",
+      "freq": "121.90"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Dep (ID/Lincoln)",
+      "mount": "kbos_dep"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Clearance",
+      "mount": "kbos_del"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Ramp",
+      "mount": "kbos_ramp"
+    },
+    {
+      "airport": "KBOS",
+      "airport_name": "Boston Logan International Airport",
+      "name": "Tower (East)",
+      "mount": "kbos_twr2"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (10R/28C)",
+      "mount": "kord1n2_app_133625",
+      "freq": "133.625"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (10R/28C) #2",
+      "mount": "kord1n1_app_133625",
+      "freq": "133.625"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (27L/09R/10C Z)",
+      "mount": "kord1n2_app_119000",
+      "freq": "119.000"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (27R/9L) #1",
+      "mount": "kord1n2_app_124350",
+      "freq": "124.350"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (27R/9L) #2",
+      "mount": "kord1n1_app_124350",
+      "freq": "124.350"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (Arr/Dep Secondary) #1",
+      "mount": "kord1n2_app_132175",
+      "freq": "132.175"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (Arr/Dep Secondary) #2",
+      "mount": "kord1n1_app_132175",
+      "freq": "132.175"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (NE Feeder)",
+      "mount": "kord1n2_app_125700",
+      "freq": "125.700"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (NW Feeder)",
+      "mount": "kord1n2_app_135025",
+      "freq": "135.025"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (SE Feeder)",
+      "mount": "kord1s1_app_118925",
+      "freq": "118.925"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach (SW Feeder)",
+      "mount": "kord1n2_app_135075",
+      "freq": "135.075"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Dep (125.4)",
+      "mount": "kord1n1_dep_125400",
+      "freq": "125.400"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Departure #1",
+      "mount": "kord1s1_dep_128575",
+      "freq": "128.575"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Departure (NE Loop)",
+      "mount": "kord1n2_dep_118275",
+      "freq": "118.275"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "ATIS",
+      "mount": "kord1s1_atis"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Del/Ramp/Metering",
+      "mount": "kord1s1_del_ramp"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Dep (126.625)",
+      "mount": "kord1s1_dep_126625",
+      "freq": "126.625"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Ground",
+      "mount": "kord1s1_gnd"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Ground (Inbound) #1",
+      "mount": "kord1n2_gnd_in"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Ground (Outbound) #1",
+      "mount": "kord1n2_gnd_out"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Ground/Metering",
+      "mount": "kord1n2_gnd_meter"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Tower (Center 10C-28C/4R-22L)",
+      "mount": "kord1n2_twr_ctr2"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Tower (Center 10L/28R)",
+      "mount": "kord1n1_twr_132700",
+      "freq": "132.700"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Tower (Center 9C-27C)",
+      "mount": "kord1n2_twr_ctr1"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Tower (North) #1",
+      "mount": "kord1n2_twr_n"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Tower (North) #2",
+      "mount": "kord1n1_twr_126900",
+      "freq": "126.900"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Tower (South) #2",
+      "mount": "kord1n1_twr_120750",
+      "freq": "120.750"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Towers (North Side)",
+      "mount": "kord1s1_twr_n"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Towers (South Side)",
+      "mount": "kord1s1_twr_s"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "ZAU Chicago Center (Sector 81 CRIBB Low) #1",
+      "mount": "kord1n2_zau_cribb"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "ZAU Chicago Center (Sector 81 CRIBB Low) #2",
+      "mount": "kord1n1_zau_cribb"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Tower",
+      "mount": "kord_twr",
+      "freq": "120.75"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Approach",
+      "mount": "kord_app",
+      "freq": "125.00"
+    },
+    {
+      "airport": "KORD",
+      "airport_name": "Chicago O'Hare International Airport",
+      "name": "Chicago Departure",
+      "mount": "kord_dep"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Atlanta Approach (NW Satellite)",
+      "mount": "kryy1_atlapp_121000",
+      "freq": "121.000"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Atlanta Approach (TAR NW) #1",
+      "mount": "kryy1_atlapp_128000",
+      "freq": "128.000"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ATIS (Arrival)",
+      "mount": "katl_atis_arr"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ATIS (Departure)",
+      "mount": "katl_atis_dep"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Clearance Delivery",
+      "mount": "katl_del"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Company Channels",
+      "mount": "katl_co"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Departure (North)",
+      "mount": "katl_dep_n"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Departure (South)",
+      "mount": "katl_dep_s"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Final Approach 26R/8L",
+      "mount": "katl_app_fin_v"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Final Approach 27L/9R",
+      "mount": "katl_app_fin_o"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Final Approach 28/10",
+      "mount": "katl_app_fin_a"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Ground",
+      "mount": "katl_gnd",
+      "freq": "121.90"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Ground (Rwy 10/28)",
+      "mount": "katl_gnd_1028",
+      "freq": "102.8"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Ground (Rwys 8/26)",
+      "mount": "katl_gnd_0826",
+      "freq": "082.6"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Ground (Rwys 9/27)",
+      "mount": "katl_gnd_0927",
+      "freq": "092.7"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Ramp",
+      "mount": "katl_ramp"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Tower",
+      "mount": "katl_twr",
+      "freq": "119.10"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Tower (Rwy 10/28)",
+      "mount": "katl_twr_1028",
+      "freq": "102.8"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Tower (Rwy 8L/26R)",
+      "mount": "katl_twr_08l26r"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Tower (Rwy 8R/26L)",
+      "mount": "katl_twr_08r26l"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Tower (Rwy 8R/8L/26L/26R)",
+      "mount": "katl_twr_08"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Tower (Rwy 9L/27R)",
+      "mount": "katl_twr_09l27r"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Tower (Rwy 9R/27L)",
+      "mount": "katl_twr_09r27l"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Tower (Rwy 9R/9L/27L/27R)",
+      "mount": "katl_twr_09"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Traffic Management",
+      "mount": "katl_tmu"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ZTL Altanta Center (Sector 18 Commerce Low)",
+      "mount": "kczl1_ztl_134800",
+      "freq": "134.800"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ZTL Altanta Center (Sector 25 Black Jack Mtn Low)",
+      "mount": "kczl1_ztl_127050",
+      "freq": "127.050"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ZTL Altanta Center (Sector 38 N Dep Low)",
+      "mount": "kczl1_ztl_133100",
+      "freq": "133.100"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ZTL Altanta Center (Sector 49 LOGEN Low)",
+      "mount": "kczl1_ztl_121350",
+      "freq": "121.350"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ZTL Atlanta Center (Macon High)",
+      "mount": "katl_ztl22"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ZTL Atlanta Center (Sector 09)",
+      "mount": "ztl09"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "ZTL Atlanta Center (Sector 18)",
+      "mount": "kgvl1_ztl18"
+    },
+    {
+      "airport": "KATL",
+      "airport_name": "Hartsfield Jackson Atlanta International Airport",
+      "name": "Approach (Final)",
+      "mount": "katl_app_final"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "App (East Feeder)",
+      "mount": "kpoc2_klax_app_east_feeder"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "App (Zuma/NW Arr)",
+      "mount": "klax3n_nw_feeder"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "App (Zuma/NW Arr) #2",
+      "mount": "khhr1_app_124500",
+      "freq": "124.500"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ARFF/Emergency",
+      "mount": "klax3n_arff"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ARINC 128.9",
+      "mount": "klax4n_arinc"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ATIS (Arrival)",
+      "mount": "klax4n_atis_arr"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ATIS (Departure)",
+      "mount": "klax4n_atis_dep"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Clearance Delivery",
+      "mount": "klax3n_del"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Dep/West App",
+      "mount": "klax7"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Final App (North)",
+      "mount": "klax4n_app_fin_n"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Final App (North/South)",
+      "mount": "klax6"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Final App (South) #1",
+      "mount": "klax3n_app_fin_s"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Final App (South) #2",
+      "mount": "khhr1_app_124900",
+      "freq": "124.900"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Ground (Metering)",
+      "mount": "klax3n_p_gnd_meter"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Ground (North)",
+      "mount": "klax1"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Ground (North/South)",
+      "mount": "klax_gnd",
+      "freq": "121.65"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Ground (South)",
+      "mount": "klax5"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "SFRA",
+      "mount": "klax4n_sfra"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Tower (Helicopters) #1",
+      "mount": "klax3n_heli"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Tower (Helicopters) #2",
+      "mount": "khhr1_klax_twr_heli"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Tower (North) #1",
+      "mount": "klax3"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Tower (North) #2",
+      "mount": "khhr1_klax_twr_n"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Tower (North/South) #1",
+      "mount": "klax_twr",
+      "freq": "120.95"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Tower (North/South) #2",
+      "mount": "khhr1_klax_twr"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Tower (South) #1",
+      "mount": "klax4"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "Tower (South) #2",
+      "mount": "khhr1_klax_twr_s"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "SOCAL Dep (Malibu Sector W/NW Dep) #1",
+      "mount": "klax3n_dep_125200",
+      "freq": "125.200"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "SOCAL Dep (Malibu Sector W/NW Dep) #2",
+      "mount": "khhr1_app_125200",
+      "freq": "125.200"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "SOCAL Dep (Manhattan Sector SW-NE) #1",
+      "mount": "klax3n_dep_124300",
+      "freq": "124.300"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "SOCAL Dep (Manhattan Sector SW-NE) #2",
+      "mount": "khhr1_app_124300",
+      "freq": "124.300"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 04",
+      "mount": "khhr1_zla04"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 09",
+      "mount": "ksan_zla09"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 10",
+      "mount": "ksan_zla10"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 12",
+      "mount": "ksan_zla12"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 13",
+      "mount": "khhr1_zla13"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 21",
+      "mount": "khhr1_zla21"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 21",
+      "mount": "klax4n_zla_132850",
+      "freq": "132.850"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 30 #1",
+      "mount": "kont1_zla30"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 30 #2",
+      "mount": "klax3n_zla30"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 30 #3",
+      "mount": "ksan_zla30"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 30 #4",
+      "mount": "khhr1_zla30"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 31",
+      "mount": "ksan_zla31"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sector 40",
+      "mount": "ksan_zla40"
+    },
+    {
+      "airport": "KLAX",
+      "airport_name": "Los Angeles International Airport",
+      "name": "ZLA LA Center Sectors 04/13/21",
+      "mount": "klax8"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Company Channels",
+      "mount": "ksfo_co"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "D-ATIS",
+      "mount": "ksfo_atis"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Del/Gnd (Alt)/Twr (Alt)",
+      "mount": "ksfo_gnd2"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Dep 120.9/127.0",
+      "mount": "ksfo_dep1"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Dep 135.1",
+      "mount": "ksfo_dep2"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Ground",
+      "mount": "ksfo_gnd",
+      "freq": "121.80"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Ground/Tower",
+      "mount": "ksfo_gnd_twr"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "NORCAL App 28L/R",
+      "mount": "ksfo_app2_l"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "NORCAL App 28L/R + BSR/MOD STARs",
+      "mount": "ksfo_app2"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "NORCAL BSR2/MOD2 Arrivals",
+      "mount": "ksfo_app2_r"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Ramp",
+      "mount": "ksfo_ramp"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Tower",
+      "mount": "ksfo_twr",
+      "freq": "120.50"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Tower/Ground",
+      "mount": "ksfo_twr2"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "NORCAL Departure (KSFO/KOAK)",
+      "mount": "koak_dep"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "ZOA Oakland Center (35/40/41)",
+      "mount": "zoa_sfo"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "NORCAL Departure",
+      "mount": "ksfo_dep"
+    },
+    {
+      "airport": "KSFO",
+      "airport_name": "San Francisco International Airport",
+      "name": "Clearance",
+      "mount": "ksfo_del"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Approach (East)",
+      "mount": "ksea3_app_e"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Approach (SE)",
+      "mount": "ksea3_app_se"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Approach (Secondary)",
+      "mount": "ksea3_app_bu"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Approach (South)",
+      "mount": "ksea3_app_s"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Approach (West)",
+      "mount": "ksea3_app_west"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Area Emergency/Guard",
+      "mount": "ksea3_guard"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Departure (East)",
+      "mount": "ksea3_dep_east"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Departure (West)",
+      "mount": "ksea3_dep_west"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Gate Hold",
+      "mount": "ksea3_gate_hold"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Ground",
+      "mount": "ksea3_gnd"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Ramp (North/Cargo)",
+      "mount": "ksea3_ramp_n_cargo"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Ramp (South)",
+      "mount": "ksea3_ramp_s"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Tower (16L/34R,16C/34C)",
+      "mount": "ksea3_twr_east"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Tower (16R/34L)",
+      "mount": "ksea3_twr_west"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Seattle Center (Sector 32 Low/Hi)",
+      "mount": "ksea_zse_126600",
+      "freq": "126.600"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Tower",
+      "mount": "ksea_twr",
+      "freq": "119.90"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Ground",
+      "mount": "ksea_gnd",
+      "freq": "121.70"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Approach",
+      "mount": "ksea_app",
+      "freq": "120.40"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Departure",
+      "mount": "ksea_dep"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Del/Ramp",
+      "mount": "ksea_ramp"
+    },
+    {
+      "airport": "KSEA",
+      "airport_name": "Seattle\u2013Tacoma International Airport",
+      "name": "Departure (Rwy 34)",
+      "mount": "ksea_dep2"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Approach (KFLL)",
+      "mount": "kmia3_app_133775",
+      "freq": "133.775"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Approach (North Arr Backup)",
+      "mount": "kmia3_app_12575",
+      "freq": "125.75"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Approach (North Arr)",
+      "mount": "kmia3_app_12485",
+      "freq": "124.85"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Approach (South Arr)",
+      "mount": "kmia3_app_1205",
+      "freq": "120.5"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "ATIS (Arrival)",
+      "mount": "kmia3_atis_arr"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "ATIS (Departure)",
+      "mount": "kmia3_atis_dep"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Clearance Delivery",
+      "mount": "kmia3_del"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Departure (North)",
+      "mount": "kmia3_app_11945",
+      "freq": "119.45"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Departure (South)",
+      "mount": "kmia3_dep_1255",
+      "freq": "125.5"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Emergency/Guard",
+      "mount": "kmia3_guard"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Ground (8L/8R/12/26L/26R)",
+      "mount": "kmia3_gnd"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Ground (Rwys 9/27 & 30)",
+      "mount": "kmia3_gnd2"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Signature FBO",
+      "mount": "kmia3_sig"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Tower #2",
+      "mount": "kmia3_twr"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Tower (North)",
+      "mount": "kmia3_twr_1183",
+      "freq": "118.3"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Tower (Rwy 27/30)",
+      "mount": "kmia3_gate_hold"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Tower (South)",
+      "mount": "kmia3_twr_1239",
+      "freq": "123.9"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "ZMA26 Miami Center (Homestead)",
+      "mount": "zma26_kmia3"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "ZMA40 Miami Center (Bimini)",
+      "mount": "zma40_kmia3"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "ZMA41 Miami Center (Junar)",
+      "mount": "zma41_kmia3"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "ZMA60 Miami Center (Georgetown)",
+      "mount": "zma60_kmia3"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Tower #1",
+      "mount": "kmia_twr",
+      "freq": "118.30"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Approach #1",
+      "mount": "kmia_app",
+      "freq": "124.85"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Approach/Departure",
+      "mount": "kmia_app_dep"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Departure/Approach",
+      "mount": "kmia_dep"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Tower #2",
+      "mount": "kmia_twr2"
+    },
+    {
+      "airport": "KMIA",
+      "airport_name": "Miami International Airport",
+      "name": "Approach #2",
+      "mount": "kmia_app2"
+    }
+  ]
+}

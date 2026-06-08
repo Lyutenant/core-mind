@@ -15,21 +15,32 @@ _catalog: ATCCatalog | None = None
 _catalog_path: Path = Path.home() / ".coremind" / "atc-catalog.json"
 
 
+_DEFAULT_CATALOG = Path(__file__).parent.parent.parent / "data" / "atc-catalog-default.json"
+
+
 def init_atc_catalog(catalog_path: Path) -> None:
     global _catalog, _catalog_path
     from coremind.node_mcp.atc_catalog import ATCCatalog, load_atc_catalog
     _catalog_path = catalog_path
     data = load_atc_catalog(catalog_path)
     if data is None:
-        logger.warning(
-            "ATC catalog not found at %s — ATC tools will return an error until you "
-            "run 'coremind atc scan' or 'coremind atc add'.",
-            catalog_path,
-        )
-        _catalog = ATCCatalog({"channels": []})
+        # Fall back to the bundled default catalog
+        data = load_atc_catalog(_DEFAULT_CATALOG)
+        if data is not None:
+            logger.info(
+                "No user ATC catalog at %s — loaded bundled default (%d channels). "
+                "Run 'coremind atc scan' to build your own.",
+                catalog_path,
+                len(data.get("channels", [])),
+            )
+        else:
+            logger.warning(
+                "ATC catalog not found at %s — run 'coremind atc scan' or 'coremind atc add'.",
+                catalog_path,
+            )
     else:
-        _catalog = ATCCatalog(data)
         logger.info("ATC catalog loaded: %d channel(s)", len(data.get("channels", [])))
+    _catalog = ATCCatalog(data or {"channels": []})
 
 
 def _no_catalog_msg() -> str:
