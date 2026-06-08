@@ -412,12 +412,13 @@ CoreMind uses the Ollama native tool API — the LLM decides when to call tools 
 | `get_current_time` | "What time is it?" | Uses `app.user_timezone` if set |
 | `get_weather` | "What's the weather?" / "Forecast for tomorrow?" | wttr.in, no API key; 1–3 day forecasts |
 | `get_aviation_weather` | "What's the METAR at Leesburg?" / "Any PIREPs?" | NOAA aviationweather.gov, no API key; METAR/TAF/PIREP |
+| `lookup_airport` | "What's the ICAO for Heathrow?" / "What airport is IAD?" | Bundled offline database, 19K airports, no API key |
 
 Enable in Hub `config.yaml`:
 ```yaml
 tools:
   enabled: true
-  built_in: [time, weather, aviation_weather]
+  built_in: [time, weather, aviation_weather, airport]
 ```
 
 **Weather and time defaults:**
@@ -565,13 +566,11 @@ coremind atc scan KEWR KJFK KLGA KDCA KJYO
 # ...
 ```
 
-Some busy airports use obfuscated mount names that can't be guessed. Add those manually with a descriptive channel name so disambiguation works:
+Some busy airports use obfuscated mount names that can't be guessed. Add those manually with a descriptive channel name so disambiguation works. Airport names are auto-filled from the bundled ICAO database — no `--airport-name` flag needed for known airports:
 
 ```bash
-coremind atc add KIAD "Tower Runway 1C/19C" kiad1_twr_1c19c_120250 \
-  --freq 120.250 --airport-name "Washington Dulles"
-coremind atc add KIAD "Tower Runway 1R/19L" kiad1_twr_1r19l_119850 \
-  --freq 119.850 --airport-name "Washington Dulles"
+coremind atc add KIAD "Tower Runway 1C/19C" kiad1_twr_1c19c_120250 --freq 120.250
+coremind atc add KIAD "Tower Runway 1R/19L" kiad1_twr_1r19l_119850 --freq 119.850
 ```
 
 The catalog is saved to `~/.coremind/atc-catalog.json`. Re-run `atc scan` whenever you want to add more airports.
@@ -758,6 +757,9 @@ Pre-flight check with a colour-coded summary. Exit code is 1 if any check fails.
 
 ```
 coremind/
+  airports.py     Bundled ICAO database (19K airports, offline lookup + search)
+  data/
+    airports.json OurAirports data — ICAO → name/city/country/IATA
   config/         Pydantic settings models (loaded from config.yaml)
   audio_input/    Microphone recording + VAD
   audio_output/   Speaker playback (with auto-resampling for USB speakers)
@@ -769,7 +771,7 @@ coremind/
   vad/            Voice activity detection (energy-based)
   server/         CoreMind Hub — FastAPI server + web dashboard
   tools/          Tool dispatcher, built-in tools, Hub MCP client
-    built_in/     get_current_time, get_weather, get_aviation_weather
+    built_in/     get_current_time, get_weather, get_aviation_weather, lookup_airport
   node_mcp/       Node MCP server — exposes Pi capabilities to Hub (17 tools)
     playback.py   Shared mpv process (music + ATC mutual exclusion)
     catalog.py    Music catalog (scan, search, playlist CRUD)
@@ -803,3 +805,4 @@ coremind/
 | 16 | Follow-up loop safety (stop phrases, min-word filter, cooldown) | ✓ |
 | 34 | Music catalog (artist/album/playlist browse + voice CRUD) | ✓ |
 | 35 | Live ATC streaming (auto-discovery + manual catalog; disambiguation; 4 MCP tools) | ✓ |
+| 36 | Bundled ICAO airport database (19K airports, offline `lookup_airport` tool; auto-fills ATC catalog) | ✓ |
