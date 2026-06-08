@@ -584,11 +584,14 @@ tools:
 
 Without the `mcp_servers` entry on the Hub, the LLM has no visibility into the ATC (or music) tools even if the Node MCP server is running.
 
-**Build the ATC catalog**
+**Build the ATC catalog (run on the Pi)**
+
+The catalog is built and stored on the Pi — run these commands in a terminal on the Raspberry Pi (or over SSH).
 
 Most airports use standard mount names that can be auto-discovered:
 
 ```bash
+# SSH into the Pi, then:
 coremind atc scan KEWR KJFK KLGA KDCA KJYO
 # ✓  kewr_twr  Newark Liberty Tower
 # ✓  kewr_gnd  Newark Liberty Ground
@@ -603,7 +606,7 @@ coremind atc add KIAD "Tower Runway 1C/19C" kiad1_twr_1c19c_120250 --freq 120.25
 coremind atc add KIAD "Tower Runway 1R/19L" kiad1_twr_1r19l_119850 --freq 119.850
 ```
 
-The catalog is saved to `~/.coremind/atc-catalog.json`. Re-run `atc scan` whenever you want to add more airports.
+The catalog is saved to `~/.coremind/atc-catalog.json` on the Pi. Re-run `atc scan` whenever you want to add more airports. The Node MCP server picks up catalog changes automatically on the next tool call — no restart needed.
 
 **Available tools (4):**
 
