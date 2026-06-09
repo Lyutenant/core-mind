@@ -443,6 +443,8 @@ When a tool fires, a chip badge appears on the turn card in the dashboard (e.g.,
 
 Any MCP-compatible server can be wired in through config — no code changes needed. The Hub connects at startup and makes the server's tools available to the LLM alongside built-in tools.
 
+**Startup order does not matter.** If the Node MCP server is not yet up when the Hub starts, the Hub retries the connection automatically with exponential backoff (10 s → 60 s max). Tools become available to the LLM as soon as the Node is reachable — no Hub restart needed.
+
 ```bash
 pip install 'coremind[tools]'   # install the mcp SDK once
 ```
@@ -458,6 +460,14 @@ tools:
       transport: http
       url: http://100.x.x.x:8767   # Pi's Tailscale IP
 ```
+
+**Diagnosing MCP tool registration:**
+```bash
+curl http://localhost:8765/api/tools
+# {"total":21,"built_in":["get_current_time",...],"mcp":["play_atc",...],"mcp_connected":true}
+```
+
+If `mcp` is an empty list, check Hub logs for `"initial connection failed"` or `"mcp package not installed"`. The Hub will keep retrying — wait ~10 s after the Node starts and query again.
 
 ### Voice-Controlled Music Player
 
