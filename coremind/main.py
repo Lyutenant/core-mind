@@ -48,6 +48,11 @@ def _setup_logging(level: str) -> None:
     # httpx logs every HTTP request at INFO — suppress routine heartbeat noise.
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    # mcp.client.sse logs at ERROR when the Node restarts and drops the SSE
+    # connection mid-stream ("peer closed connection without sending complete
+    # message body"). This is expected on Node restart — our reconnect loop
+    # handles it. Suppress to avoid alarming noise in Hub logs.
+    logging.getLogger("mcp.client.sse").setLevel(logging.CRITICAL)
 
 
 @app.callback()
