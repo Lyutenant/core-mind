@@ -211,6 +211,8 @@ async def _run_llm_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:
     dispatcher = _get_dispatcher()
     tool_defs = dispatcher.get_tool_definitions()
 
+    logger.debug("Active tools (%d): %s", len(tool_defs), [t["function"]["name"] for t in tool_defs])
+
     if not tool_defs:
         return brain.ask(messages), []
 
@@ -287,6 +289,21 @@ try:
             _mcp_manager = MCPManager()
             await _mcp_manager.start(s.tools.mcp_servers)
             _get_dispatcher().set_mcp_manager(_mcp_manager)
+            mcp_tool_count = len(_mcp_manager._schemas)
+            if mcp_tool_count:
+                logger.info(
+                    "MCP tools ready: %d tool(s) from %d server(s). "
+                    "Total tools available: %d",
+                    mcp_tool_count,
+                    len(s.tools.mcp_servers),
+                    len(_get_dispatcher().get_tool_definitions()),
+                )
+            else:
+                logger.warning(
+                    "MCP servers configured but no tools registered — "
+                    "Node may not be reachable yet. Will retry in background. "
+                    "Check GET /api/tools to monitor status."
+                )
 
     @app.on_event("shutdown")
     async def _shutdown():
@@ -357,6 +374,31 @@ try:
         _reset_singletons()
         _broadcast({"type": "config_saved"})
         return {"status": "saved"}
+
+    # -----------------------------------------------------------------------
+    # Tool registry inspection
+    # -----------------------------------------------------------------------
+
+    @app.get("/api/tools")
+    async def list_tools():
+        """Return all currently registered tools (built-in + MCP).
+
+        Useful for verifying MCP connectivity: if MCP tools are missing here,
+        the Hub has not yet connected to the Node MCP server.
+        """
+        dispatcher = _get_dispatcher()
+        tool_defs = dispatcher.get_tool_definitions()
+        built_in_names = list(dispatcher._tools.keys())
+        mcp_names = [
+            t["function"]["name"] for t in tool_defs
+            if t["function"]["name"] not in built_in_names
+        ]
+        return {
+            "total": len(tool_defs),
+            "built_in": built_in_names,
+            "mcp": mcp_names,
+            "mcp_connected": _mcp_manager is not None and bool(mcp_names),
+        }
 
     # -----------------------------------------------------------------------
     # Conversation history
