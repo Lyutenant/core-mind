@@ -195,11 +195,32 @@
       text-align: center;
       margin: auto;
     }
+    .chat-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+    .chat-input-row input[type=text] {
+      flex: 1;
+      height: 36px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--card);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+    }
+    .chat-input-row input[type=text]:focus { outline: none; border-color: var(--accent); }
     .turn-card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
+      flex-shrink: 0;
       animation: fadeIn .25s ease;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
@@ -632,9 +653,14 @@
     <section class="view active" id="view-dashboard">
       <div class="conversation-panel">
         <div class="conversation-log" id="conversation-log"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chat-input" placeholder="Type a message…"
+                 onkeydown="if(event.key==='Enter'&&!event.shiftKey)sendChat()">
+          <button class="btn primary" id="chat-send-btn" onclick="sendChat()">Send</button>
+        </div>
         <div class="processing-bar">
           <div class="spinner" id="spinner"></div>
-          <span id="status-text">Idle — waiting for Node connection</span>
+          <span id="status-text">Idle</span>
         </div>
       </div>
       <div class="stats-panel">
@@ -1066,6 +1092,7 @@
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let currentView  = 'dashboard';
+let activeSessionId = 'dashboard';  // tracks the session of the most recent voice turn
 let currentTab   = 'app';
 let currentMode  = 'hub';
 let assistantName = 'Assistant';
@@ -1209,6 +1236,11 @@ async function loadConversation() {
   const log = document.getElementById('conversation-log');
   log.innerHTML = '';
   turns.forEach(addTurnCard);
+  // Seed the active session from the most recent loaded turn so typed follow-ups
+  // share context with the existing voice conversation immediately after reload.
+  if (turns.length > 0 && turns[turns.length - 1].session_id) {
+    activeSessionId = turns[turns.length - 1].session_id;
+  }
 }
 
 function renderToolChips(toolCalls) {
@@ -1322,6 +1354,7 @@ function handleEvent(ev) {
     case 'turn': {
       const pending = document.getElementById('turn-pending');
       if (pending) pending.remove();
+      if (ev.session_id) activeSessionId = ev.session_id;
       addTurnCard(ev);
       refreshHealth();
       break;
@@ -1538,7 +1571,7 @@ async function loadNodes() {
 function renderNodes(nodes) {
   const el = document.getElementById('nodes-list');
   if (!nodes || !nodes.length) {
-    el.innerHTML = '<div class="nodes-empty">No nodes registered yet.<br>Start CoreMind on a Pi to see it here.</div>';
+    el.innerHTML = '<div class="nodes-empty">No nodes registered yet.<br>The Pi must have <code>remote_brain.enabled: true</code> in its config.yaml and be running <code>coremind run</code>.<br><small style="color:var(--text-dim)">Registration happens automatically — wait up to 30 s after the Pi starts.</small></div>';
     return;
   }
   // Preserve open state
@@ -1644,6 +1677,31 @@ async function clearNodeConfig(nodeId) {
       loadNodes();
     }
   } catch (e) { toast('Failed to reset node config', 'error'); }
+}
+
+// ── Chat input ───────────────────────────────────────────────────────────────
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const btn   = document.getElementById('chat-send-btn');
+  const text  = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.disabled = true;
+  btn.disabled = true;
+  try {
+    const r = await fetch('/v1/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text, session_id: activeSessionId}),
+    });
+    if (!r.ok) toast('Chat request failed (' + r.status + ')', 'error');
+  } catch (e) {
+    toast('Chat failed: ' + e, 'error');
+  } finally {
+    input.disabled = false;
+    btn.disabled   = false;
+    input.focus();
+  }
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

@@ -309,13 +309,19 @@ class VoiceLoop:
             if self._post_response_cooldown > 0:
                 time.sleep(self._post_response_cooldown)
 
+            # Scale onset timeout with the most recent response word count so the
+            # user has more time to start speaking after a long reply (~0.15 s/word).
+            onset = min(
+                max(self._follow_up_seconds, len(last_r.split()) * 0.15),
+                30.0,
+            )
             self._status("Listening for follow-up...")
             follow_wav = self._recorder.record_with_vad(
                 vad=self._vad,
                 silence_seconds=self._vad_silence_seconds,
                 max_record_seconds=self._vad_max_record_seconds,
                 min_speech_seconds=self._vad_min_speech_seconds,
-                onset_timeout=self._follow_up_seconds,
+                onset_timeout=onset,
             )
             if follow_wav is None:
                 # Silence during follow-up window — return to idle / wake word

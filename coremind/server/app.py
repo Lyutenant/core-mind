@@ -257,7 +257,7 @@ async def _run_llm_with_tools(messages: list[dict]) -> tuple[str, list[dict]]:
 
 try:
     from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
-    from fastapi.responses import FileResponse, Response, StreamingResponse
+    from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
     app = FastAPI(title="CoreMind Hub", version="0.1.0")
 
@@ -672,6 +672,65 @@ try:
                 "X-Response": urllib.parse.quote(response_text),
             },
         )
+
+    @app.post("/v1/chat")
+    async def chat_text(request: Request):
+        global _turn_count
+        data = await request.json()
+        text = data.get("text", "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="text required")
+
+        session_id = data.get("session_id", "dashboard")
+        s = _get_settings()
+
+        _broadcast({"type": "transcript", "text": text})
+        _broadcast({"type": "status", "text": "Sending to LLM..."})
+
+        memory = _get_session(session_id)
+        messages = (
+            [{"role": "system", "content": _build_system_prompt(s)}]
+            + memory.get_messages()
+            + [{"role": "user", "content": text}]
+        )
+
+        llm_error: str | None = None
+        response_text = ""
+        tool_calls_used: list = []
+        try:
+            response_text, tool_calls_used = await _run_llm_with_tools(messages)
+        except Exception as e:
+            logger.error("LLM failed (chat): %s", e)
+            llm_error = str(e)
+            response_text = f"[Error: {e}]"
+
+        if llm_error is None:
+            memory.add("user", text)
+            memory.add("assistant", response_text)
+            _broadcast({"type": "response", "text": response_text})
+
+        # Always broadcast a turn event so the pending card is cleared regardless
+        # of whether the LLM succeeded or failed.
+        _turn_count += 1
+        turn = {
+            "turn": _turn_count,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "transcript": text,
+            "response": response_text,
+            "tool_calls": tool_calls_used,
+            "session_id": session_id,
+            "source": "chat",
+        }
+        _conversation_log.append(turn)
+        if len(_conversation_log) > 200:
+            _conversation_log.pop(0)
+
+        _broadcast({"type": "turn", **turn})
+        _broadcast({"type": "status", "text": "Idle"})
+
+        if llm_error:
+            return JSONResponse(status_code=502, content={"error": llm_error})
+        return {"response": response_text}
 
 except ImportError:
     app = None  # type: ignore[assignment]

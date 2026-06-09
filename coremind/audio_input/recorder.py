@@ -125,7 +125,14 @@ class Recorder:
                 callback=_callback,
             ):
                 now = time.monotonic()
-                deadline = now + max_record_seconds + 2.0
+                # Onset phase: wait up to onset_timeout for speech to begin.
+                # Recording phase: once speech starts, allow max_record_seconds.
+                # The deadline is reset at speech-start so the two budgets are
+                # independent — a long onset window does not inflate recording time.
+                if onset_timeout is not None:
+                    deadline = now + onset_timeout + 0.5  # small buffer past onset
+                else:
+                    deadline = now + max_record_seconds + 2.0
                 onset_deadline = (now + onset_timeout) if onset_timeout is not None else None
                 while time.monotonic() < deadline:
                     remaining = deadline - time.monotonic()
@@ -146,6 +153,9 @@ class Recorder:
                     if is_speech:
                         if not speech_started:
                             speech_started = True
+                            # Reset deadline so the full recording budget starts
+                            # from when speech actually begins, not from now.
+                            deadline = time.monotonic() + max_record_seconds + 2.0
                             speech_chunks.extend(prespeech_buf)
                         speech_chunks.append(chunk)
                         silence_count = 0
