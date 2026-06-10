@@ -1,0 +1,17 @@
+# Caddyfile for CoreMind Hub (Mac Mini)
+#
+# CoreMind Hub binds to 127.0.0.1:8765 by default.
+# Caddy listens on the Tailscale interface and proxies inbound requests.
+#
+# Usage:
+#   1. Install Caddy: https://caddyserver.com/docs/install
+#   2. Get your Tailscale IP: tailscale ip -4
+#   3. Replace 100.x.x.x below with your actual Tailscale IP
+#   4. Run: caddy run --config Caddyfile.hub.example
+#
+# The Hub dashboard will then be reachable at http://100.x.x.x:8765
+# from any device on your Tailscale network.
+
+http://100.x.x.x:8765 {
+    reverse_proxy localhost:8765
+}

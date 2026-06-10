@@ -470,6 +470,7 @@ def run() -> None:
                     catalog_path=settings.node_mcp.catalog_path,
                     atc_catalog_path=settings.node_mcp.atc_catalog_path,
                     port=settings.node_mcp.port,
+                    host=settings.node_mcp.host,
                 )
             )
 
@@ -528,7 +529,7 @@ def run() -> None:
 
 @app.command("server")
 def server_cmd(
-    host: str = typer.Option("0.0.0.0", "--host", "-H", help="Bind address."),
+    host: str = typer.Option("127.0.0.1", "--host", "-H", help="Bind address. Default 127.0.0.1 is correct when using Caddy. Use 0.0.0.0 to expose directly without a reverse proxy."),
     port: int = typer.Option(8765, "--port", "-p", help="Port to listen on."),
 ) -> None:
     """Start the CoreMind HTTP server (run this on Mac Mini, not Pi)."""
@@ -590,7 +591,7 @@ def setup_cmd(
         f"  Open [bold]http://localhost:{port}[/bold] in your browser\n"
         "  Go to Settings → App → Mode to set this device's role\n"
         "  Save, then Ctrl+C and run:\n"
-        "    Hub:        [bold]coremind server[/bold]\n"
+        "    Hub:        [bold]coremind server --host 0.0.0.0[/bold]   [dim]# or set up Caddy (see docs/setup-hub.md)[/dim]\n"
         "    Node:       [bold]coremind run[/bold]\n"
         "    Standalone: [bold]coremind run[/bold]"
     )
@@ -1104,6 +1105,102 @@ def atc_add(
         f"[green]{action}:[/green] {channel['airport']} {name}{freq_str}  →  {mount}\n"
         f"  Catalog: {catalog_path}"
     )
+
+
+@atc_app.command("test")
+def atc_test(
+    query: str = typer.Argument(..., help="Channel query, e.g. 'KJYO tower' or 'Newark approach'"),
+    wait: float = typer.Option(3.0, "--wait", "-w", help="Seconds to wait before checking mpv status."),
+    catalog: str = typer.Option("", "--catalog", help="Override catalog path."),
+) -> None:
+    """Test ATC streaming: resolve a query, start mpv, and confirm the stream stays alive."""
+    import subprocess
+    import time
+
+    from coremind.node_mcp.atc_catalog import ATCCatalog, load_atc_catalog, stream_url
+
+    settings = _get_settings()
+    catalog_path = Path(catalog).expanduser() if catalog else Path(settings.node_mcp.atc_catalog_path).expanduser()
+
+    _DEFAULT_CATALOG = Path(__file__).parent / "data" / "atc-catalog-default.json"
+    data = load_atc_catalog(catalog_path)
+    if data is None:
+        console.print(f"[yellow]No catalog at {catalog_path} — trying bundled default.[/yellow]")
+        data = load_atc_catalog(_DEFAULT_CATALOG)
+    if data is None:
+        console.print("[red]No ATC catalog found.[/red]")
+        raise typer.Exit(1)
+
+    cat = ATCCatalog(data)
+    console.print(f"Catalog loaded: [cyan]{len(cat._channels)}[/cyan] channel(s) from [dim]{catalog_path}[/dim]")
+
+    candidates = cat.find_candidates(query)
+    if not candidates:
+        console.print(f"[red]No channel matched '{query}'.[/red]")
+        airports = cat.list_airports()
+        console.print("Available airports:", ", ".join(airports[:10]))
+        raise typer.Exit(1)
+
+    if len(candidates) > 1:
+        console.print(f"[yellow]{len(candidates)} channels matched (ambiguous):[/yellow]")
+        for ch in candidates:
+            freq_str = f"  {ch['freq']} MHz" if ch.get("freq") else ""
+            console.print(f"  {ch['airport']} | {ch['name']}{freq_str}  →  {ch['mount']}")
+        console.print("Re-run with a more specific query.")
+        raise typer.Exit(1)
+
+    ch = candidates[0]
+    url = stream_url(ch["mount"])
+    label = f"{ch.get('airport', '')} {ch.get('name', ch['mount'])}"
+    freq_str = f" ({ch['freq']} MHz)" if ch.get("freq") else ""
+    console.print(f"\nMatch: [bold]{label}{freq_str}[/bold]")
+    console.print(f"Mount: [cyan]{ch['mount']}[/cyan]")
+    console.print(f"URL:   [cyan]{url}[/cyan]")
+
+    # Verify mount is reachable before spawning mpv
+    try:
+        import httpx
+        pls_url = f"https://www.liveatc.net/play/{ch['mount']}.pls"
+        console.print(f"\nChecking PLS endpoint: [dim]{pls_url}[/dim]")
+        r = httpx.get(pls_url, timeout=8.0, follow_redirects=True)
+        if r.status_code == 200 and "[playlist]" in r.text:
+            console.print("[green]✓ PLS responds — mount is valid[/green]")
+        else:
+            console.print(f"[red]✗ PLS returned HTTP {r.status_code} — mount may be stale or down[/red]")
+            console.print(f"  Response: {r.text[:120]}")
+    except Exception as e:
+        console.print(f"[yellow]PLS check failed ({e}) — proceeding anyway[/yellow]")
+
+    # Start mpv with stderr visible so errors are shown
+    console.print(f"\nStarting mpv… (waiting {wait:.0f}s to confirm stream)")
+    try:
+        proc = subprocess.Popen(
+            ["mpv", "--no-terminal", url],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        console.print("[red]mpv not found. Install with: sudo apt install mpv[/red]")
+        raise typer.Exit(1)
+
+    time.sleep(wait)
+    exit_code = proc.poll()
+
+    if exit_code is None:
+        console.print(f"[green]✓ mpv is running — stream is alive[/green]  (PID {proc.pid})")
+        console.print("Stopping test stream.")
+        proc.terminate()
+        proc.wait(timeout=3)
+    else:
+        stderr_out = proc.stderr.read().decode(errors="replace").strip() if proc.stderr else ""
+        console.print(f"[red]✗ mpv exited after {wait:.0f}s (exit code {exit_code})[/red]")
+        if stderr_out:
+            console.print("[yellow]mpv stderr:[/yellow]")
+            for line in stderr_out.splitlines():
+                console.print(f"  {line}")
+        else:
+            console.print("[dim]No stderr output — stream may be unreachable or mount is invalid.[/dim]")
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

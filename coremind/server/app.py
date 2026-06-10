@@ -393,12 +393,56 @@ try:
             t["function"]["name"] for t in tool_defs
             if t["function"]["name"] not in built_in_names
         ]
+        schemas = [
+            {
+                "name": t["function"]["name"],
+                "description": t["function"].get("description", ""),
+                "source": "built_in" if t["function"]["name"] in built_in_names else "mcp",
+                "parameters": t["function"].get(
+                    "parameters", {"type": "object", "properties": {}}
+                ),
+            }
+            for t in tool_defs
+        ]
         return {
             "total": len(tool_defs),
             "built_in": built_in_names,
             "mcp": mcp_names,
             "mcp_connected": _mcp_manager is not None and bool(mcp_names),
+            "schemas": schemas,
         }
+
+    @app.post("/api/tools/invoke")
+    async def invoke_tool(request: Request):
+        """Directly invoke a built-in tool by name with the given arguments.
+
+        Restricted to built-in tools only — MCP tools (filesystem, music, etc.)
+        can only be triggered through the voice loop / LLM tool calls.
+        Built-in tools marked requires_confirmation=True are also blocked.
+        """
+        data = await request.json()
+        name = (data.get("name") or "").strip()
+        args = data.get("args") or {}
+        if not name:
+            return JSONResponse(status_code=400, content={"error": "name is required"})
+        dispatcher = _get_dispatcher()
+        tool = dispatcher._tools.get(name)
+        if tool is None:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Only built-in tools can be invoked directly. MCP tools run through the voice loop."},
+            )
+        if tool.requires_confirmation:
+            return JSONResponse(
+                status_code=403,
+                content={"error": f"Tool '{name}' requires explicit confirmation and cannot be invoked directly."},
+            )
+        try:
+            result = await dispatcher.execute_async(name, args)
+            return {"result": result}
+        except Exception as e:
+            logger.error("Tool invoke error for %r: %s", name, e)
+            return JSONResponse(status_code=500, content={"error": str(e)})
 
     # -----------------------------------------------------------------------
     # Conversation history

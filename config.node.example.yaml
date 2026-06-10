@@ -119,6 +119,7 @@ tools:
 #     url: http://<this-pi-tailscale-ip>:8767
 node_mcp:
   enabled: false       # set true to expose music/volume/ATC tools to the Hub
+  host: "127.0.0.1"   # use "0.0.0.0" for direct Hub access without Caddy
   port: 8767
   music_dir: ~/Music   # root of your music library (Artist/Album/track structure)
   catalog_path: ~/.coremind/music-catalog.json   # run 'coremind music scan' to build

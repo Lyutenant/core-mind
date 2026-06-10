@@ -130,6 +130,7 @@ class ToolsConfig(BaseModel):
 
 class NodeMCPConfig(BaseModel):
     enabled: bool = False
+    host: str = "127.0.0.1"
     port: int = 8767
     music_dir: str = "~/Music"
     catalog_path: str = "~/.coremind/music-catalog.json"

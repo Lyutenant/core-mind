@@ -10,7 +10,7 @@ def create_node_mcp_server(
     music_dir: str = "~/Music",
     catalog_path: str = "~/.coremind/music-catalog.json",
     atc_catalog_path: str = "~/.coremind/atc-catalog.json",
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8767,
 ):
     """Build and return a FastMCP server exposing Node-local capabilities."""
@@ -143,8 +143,9 @@ async def run_node_mcp_server(
     catalog_path: str = "~/.coremind/music-catalog.json",
     atc_catalog_path: str = "~/.coremind/atc-catalog.json",
     port: int = 8767,
+    host: str = "127.0.0.1",
 ) -> None:
     """Start the Node MCP SSE server. Blocks until cancelled."""
-    mcp = create_node_mcp_server(music_dir, catalog_path, atc_catalog_path, host="0.0.0.0", port=port)
+    mcp = create_node_mcp_server(music_dir, catalog_path, atc_catalog_path, host=host, port=port)
     logger.info("Node MCP server listening on port %d", port)
     await mcp.run_sse_async()

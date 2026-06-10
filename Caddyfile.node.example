@@ -1,0 +1,24 @@
+# Caddyfile for CoreMind Node (Raspberry Pi)
+#
+# CoreMind Node MCP server binds to 127.0.0.1:8767 by default.
+# Caddy listens on the Tailscale interface so the Hub (Mac Mini) can
+# connect to the Node MCP server remotely.
+#
+# Usage:
+#   1. Install Caddy on the Pi: https://caddyserver.com/docs/install
+#   2. Get the Pi's Tailscale IP: tailscale ip -4
+#   3. Replace 100.x.x.x below with the Pi's actual Tailscale IP
+#   4. Run: caddy run --config Caddyfile.node.example
+#
+# In Hub config.yaml, set:
+#   tools:
+#     mcp_servers:
+#       - name: node
+#         transport: http
+#         url: http://100.x.x.x:8767   # Pi's Tailscale IP
+
+http://100.x.x.x:8767 {
+    reverse_proxy localhost:8767 {
+        header_up Host localhost:8767
+    }
+}
