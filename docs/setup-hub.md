@@ -115,30 +115,39 @@ By default the Hub binds to `127.0.0.1:8765` — only accessible locally. To rea
 
 ## 7. Caddy reverse proxy
 
-Caddy listens on the Tailscale interface and proxies to the Hub running on loopback.
+Caddy listens on all interfaces and allows only loopback + Tailscale clients; everyone else gets 403. The Hub itself stays on `127.0.0.1`.
 
 **Install Caddy:**
 ```bash
 brew install caddy
 ```
 
-**Get your Tailscale IP:**
-```bash
-tailscale ip -4
-# e.g., 100.x.x.x
-```
-
-**Create a Caddyfile** (or copy the example):
+**Create a Caddyfile** (or copy the example — no editing needed):
 ```bash
 cp Caddyfile.hub.example Caddyfile
-# Edit and replace 100.x.x.x with your actual Tailscale IP
 ```
 
 The example Caddyfile:
 ```
-http://100.x.x.x:8765 {
-    reverse_proxy localhost:8765
+:8765 {
+    @allowed remote_ip 127.0.0.1 ::1 100.64.0.0/10
+
+    handle @allowed {
+        reverse_proxy 127.0.0.1:8765
+    }
+
+    respond "Forbidden" 403
 }
+```
+
+Why `:8765` instead of binding the Tailscale IP:
+- **No boot race** — binding a specific Tailscale IP fails if Caddy starts before Tailscale is up; `:8765` always binds.
+- **No IP to configure** — `100.64.0.0/10` is the entire Tailscale address range, so the file works as-is.
+- On macOS, Caddy's wildcard bind coexists with the Hub's `127.0.0.1:8765` bind on the same port: local connections go straight to the Hub, remote connections go through Caddy. (This is macOS-specific — the Pi's Node Caddyfile uses an interface bind instead; see `docs/setup-node.md`.)
+
+To restrict access to specific devices instead of the whole tailnet, list their Tailscale IPs:
+```
+@allowed remote_ip 127.0.0.1 ::1 100.x.x.x 100.y.y.y
 ```
 
 **Run Caddy:**
@@ -146,7 +155,7 @@ http://100.x.x.x:8765 {
 caddy run
 ```
 
-The dashboard is now reachable at `http://<tailscale-ip>:8765` from any device on your Tailscale network, including iPhone.
+The dashboard is now reachable at `http://<mac-tailscale-ip>:8765` from any device on your Tailscale network, including iPhone.
 
 **Run Caddy as a background service (optional):**
 ```bash

@@ -177,34 +177,58 @@ curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
 sudo apt update && sudo apt install caddy
 ```
 
-**Get the Pi's Tailscale IP:**
+**Get both Tailscale IPs** (run `tailscale ip -4` on each machine):
 ```bash
-tailscale ip -4
-# e.g., 100.y.y.y
+tailscale ip -4    # on the Pi      → 100.x.x.x
+tailscale ip -4    # on the Mac Mini → 100.y.y.y
 ```
 
 **Install the Caddyfile** (Caddy's systemd service reads `/etc/caddy/Caddyfile`):
 ```bash
 sudo cp Caddyfile.node.example /etc/caddy/Caddyfile
-sudo nano /etc/caddy/Caddyfile   # replace 100.x.x.x with your Pi's Tailscale IP
+sudo nano /etc/caddy/Caddyfile   # replace 100.x.x.x (Pi) and 100.y.y.y (Mac Mini)
 ```
 
 The Caddyfile:
 ```
-http://100.y.y.y:8767 {
-    reverse_proxy localhost:8767 {
-        header_up Host localhost:8767
+http://100.x.x.x:8767 {
+    # Allow only the Hub (Mac Mini's Tailscale IP)
+    @hub remote_ip 100.y.y.y
+
+    handle @hub {
+        reverse_proxy localhost:8767 {
+            header_up Host localhost:8767
+        }
     }
+
+    respond "Forbidden" 403
 }
 ```
 
-The `header_up Host localhost:8767` directive is required — FastMCP's DNS-rebinding guard only accepts `Host: localhost:*` values; without the port it rejects the request with 421.
+Two details that matter:
+
+- **`header_up Host localhost:8767` is required** — FastMCP's DNS-rebinding guard only accepts `Host: localhost:*` values; without the port it rejects the request with 421.
+- **The bind is the Pi's Tailscale IP, not `:8767`** — on Linux, a wildcard bind would conflict with the MCP server's `127.0.0.1:8767` bind ("address already in use"). The Hub's Caddyfile on macOS can use a wildcard bind; the Pi cannot.
+
+The `remote_ip` allowlist means only the Hub can reach the MCP server — other tailnet devices (phones, laptops) get 403.
 
 **Start Caddy:**
 ```bash
 sudo systemctl enable caddy
 sudo systemctl start caddy
 ```
+
+**Fix the boot ordering** (recommended): because Caddy binds the Tailscale IP, it fails at boot if it starts before Tailscale is up. Make Caddy wait:
+```bash
+sudo systemctl edit caddy
+```
+Add:
+```ini
+[Unit]
+After=tailscaled.service
+Wants=tailscaled.service
+```
+Then `sudo systemctl daemon-reload && sudo systemctl restart caddy`.
 
 **Update Hub `config.yaml`** to point to the Pi's Tailscale IP:
 ```yaml

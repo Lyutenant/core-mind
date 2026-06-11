@@ -1,17 +1,34 @@
 # Caddyfile for CoreMind Hub (Mac Mini)
 #
-# CoreMind Hub binds to 127.0.0.1:8765 by default.
-# Caddy listens on the Tailscale interface and proxies inbound requests.
+# CoreMind Hub binds to 127.0.0.1:8765 by default. Caddy listens on all
+# interfaces (:8765) and allows only loopback + Tailscale clients;
+# everyone else gets 403.
+#
+# Why listen on :8765 instead of binding the Tailscale IP?
+#   - No boot race: binding a specific Tailscale IP fails if Caddy starts
+#     before Tailscale is up. ":8765" always binds.
+#   - On macOS, Caddy's wildcard bind coexists with the Hub's 127.0.0.1
+#     bind on the same port (local connections go straight to the Hub,
+#     remote connections go through Caddy).
+#   - NOTE: this pattern is macOS-only. On Linux the overlapping bind
+#     fails with "address already in use" — the Pi's Caddyfile
+#     (Caddyfile.node.example) uses an interface bind instead.
 #
 # Usage:
-#   1. Install Caddy: https://caddyserver.com/docs/install
-#   2. Get your Tailscale IP: tailscale ip -4
-#   3. Replace 100.x.x.x below with your actual Tailscale IP
-#   4. Run: caddy run --config Caddyfile.hub.example
+#   1. Install Caddy: brew install caddy
+#   2. Run: caddy run --config Caddyfile.hub.example
+#      (or: brew services start caddy — see docs/setup-hub.md)
 #
-# The Hub dashboard will then be reachable at http://100.x.x.x:8765
-# from any device on your Tailscale network.
+# The allowlist admits the whole Tailscale range (100.64.0.0/10).
+# To restrict to specific devices, list their IPs instead:
+#   @allowed remote_ip 127.0.0.1 ::1 100.x.x.x 100.y.y.y
 
-http://100.x.x.x:8765 {
-    reverse_proxy localhost:8765
+:8765 {
+    @allowed remote_ip 127.0.0.1 ::1 100.64.0.0/10
+
+    handle @allowed {
+        reverse_proxy 127.0.0.1:8765
+    }
+
+    respond "Forbidden" 403
 }
