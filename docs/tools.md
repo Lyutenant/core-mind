@@ -152,7 +152,7 @@ Re-run whenever you add new music. CoreMind warns in logs if the music directory
 
 ## Live ATC Streaming
 
-Stream live ATC audio from [LiveATC.net](https://www.liveatc.net) by voice command. Mic isolation works the same as with music.
+Stream live ATC audio from LiveATC by voice command. Mic isolation works the same as with music.
 
 **ATC tools (4):**
 
@@ -163,12 +163,17 @@ Stream live ATC audio from [LiveATC.net](https://www.liveatc.net) by voice comma
 | `list_atc_channels` | "What ATC channels do you have for Newark?" |
 | `stop_atc` | "Stop the ATC" |
 
-**Disambiguation:** When multiple channels match a query, CoreMind asks you to pick:
+**Channel selection:**
+
+- Naming only an airport ("Stream ATC from Dulles") defaults to its **tower**.
+- When several tower channels at one airport tie (per-runway towers like KIAD's `1C/19C` / `1R/19L`), CoreMind picks one at random — runway designators aren't practical to disambiguate by voice. Only **primary** tower feeds are eligible: backup, temp, secondary, TCA, helicopter, and emergency feeds are never auto-picked (if no primary feed exists, CoreMind asks instead).
+- Saying an explicit frequency pins the channel: "Dulles tower 120.250" streams that exact tower. A query containing a frequency is never resolved randomly, and a channel whose frequency doesn't match (or can't be confirmed from the catalog) is never streamed silently — CoreMind names the closest match and asks instead.
+- Other ambiguous matches (e.g. multiple ground frequencies) still ask you to pick:
 ```
-You: Stream ATC from Dulles
+You: Stream Dulles ground
 CoreMind: Multiple frequencies found for Washington Dulles:
-          - Tower Runway 1C/19C (120.250 MHz)
-          - Tower Runway 1R/19L (119.850 MHz)
+          - Ground (East) (121.900 MHz)
+          - Ground (West 1L/19R, 12/30) (121.625 MHz)
           Which would you like?
 ```
 
@@ -189,7 +194,7 @@ For airports with obfuscated mount names (KIAD-style), visit the LiveATC search 
 ```bash
 coremind atc js      # prints step-by-step instructions + JS snippet
 ```
-1. Open `https://www.liveatc.net/search/?icao=KXXX` in your browser
+1. Open the LiveATC airport search page (`/search/?icao=KXXX`) in your browser
 2. Open DevTools → Console, paste the JS snippet shown by `atc js`
 3. Save the JSON output to a file, e.g. `~/browser-mounts.json`
 4. Scan with the file:

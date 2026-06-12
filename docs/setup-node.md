@@ -191,12 +191,19 @@ sudo nano /etc/caddy/Caddyfile   # replace 100.x.x.x (Pi) and 100.y.y.y (Mac Min
 
 The Caddyfile:
 ```
-http://100.x.x.x:8767 {
-    # Allow only the Hub (Mac Mini's Tailscale IP)
-    @hub remote_ip 100.y.y.y
+{
+    auto_https off
+}
+
+:8767 {
+    # Listen only on the Pi's Tailscale IP (avoids the 8767 port conflict)
+    bind 100.x.x.x
+
+    # Allow the Hub (Mac Mini) + the Pi itself for local testing
+    @hub remote_ip 100.x.x.x 100.y.y.y
 
     handle @hub {
-        reverse_proxy localhost:8767 {
+        reverse_proxy 127.0.0.1:8767 {
             header_up Host localhost:8767
         }
     }
@@ -205,12 +212,11 @@ http://100.x.x.x:8767 {
 }
 ```
 
-Two details that matter:
+Three details that matter:
 
 - **`header_up Host localhost:8767` is required** — FastMCP's DNS-rebinding guard only accepts `Host: localhost:*` values; without the port it rejects the request with 421.
-- **The bind is the Pi's Tailscale IP, not `:8767`** — on Linux, a wildcard bind would conflict with the MCP server's `127.0.0.1:8767` bind ("address already in use"). The Hub's Caddyfile on macOS can use a wildcard bind; the Pi cannot.
-
-The `remote_ip` allowlist means only the Hub can reach the MCP server — other tailnet devices (phones, laptops) get 403.
+- **`bind 100.x.x.x` (the Pi's Tailscale IP) is required** — without it, Caddy binds the wildcard `0.0.0.0:8767`, which on Linux conflicts with the MCP server's `127.0.0.1:8767` bind ("address already in use"). A site address like `http://100.x.x.x:8767` does **not** restrict the listener — it only matches the Host header — so the explicit `bind` directive is what prevents the conflict. The Hub's Caddyfile on macOS can use a wildcard bind; the Pi cannot.
+- **The `remote_ip` allowlist must contain the Hub's IP** (`100.y.y.y`, the Mac Mini) — that's who connects through the proxy. The Pi's own IP (`100.x.x.x`) is also listed so you can `curl http://100.x.x.x:8767` from the Pi when testing — since Caddy only listens on the Tailscale IP, that local request arrives from the Pi's Tailscale address, not loopback. Other tailnet devices (phones, laptops) get 403.
 
 **Start Caddy:**
 ```bash
@@ -236,7 +242,7 @@ tools:
   mcp_servers:
     - name: node
       transport: http
-      url: http://100.y.y.y:8767   # Pi's Tailscale IP
+      url: http://100.x.x.x:8767   # Pi's Tailscale IP
 ```
 
 ---

@@ -54,15 +54,25 @@ def _no_catalog_msg() -> str:
 def play_atc(query: str) -> str:
     """Find the best-matching ATC channel and stream it.
 
-    If multiple channels tie on score, returns a disambiguation list so the
-    LLM can ask the user to pick one and call play_atc again with a more
-    specific query.
+    Queries that name only an airport default to its tower. When multiple
+    tower channels at one airport tie (per-runway towers), one is picked at
+    random. Other ties return a disambiguation list so the LLM can ask the
+    user to pick one and call play_atc again with a more specific query.
     """
     if _catalog is None or not _catalog._channels:
         return _no_catalog_msg()
 
-    from coremind.node_mcp.atc_catalog import stream_url
+    from coremind.node_mcp.atc_catalog import (
+        matches_query_frequency,
+        pick_tower_candidate,
+        stream_url,
+    )
     candidates = _catalog.find_candidates(query)
+
+    if len(candidates) > 1:
+        picked = pick_tower_candidate(candidates, query)
+        if picked is not None:
+            candidates = [picked]
 
     if not candidates:
         airports = _catalog.list_airports()
@@ -95,8 +105,20 @@ def play_atc(query: str) -> str:
         lines.append("Which would you like?")
         return "\n".join(lines)
 
-    # Single unambiguous match — stream it
+    # Single unambiguous match — but never stream a channel whose frequency
+    # doesn't match one the user explicitly asked for (stale or mistyped
+    # frequencies must surface, not silently tune the best-effort channel)
     ch = candidates[0]
+    if matches_query_frequency(ch, query) is False:
+        name = ch.get("name", ch["mount"])
+        freq = f" ({ch['freq']} MHz)" if ch.get("freq") else ""
+        return (
+            f"No channel matches that frequency. Closest match: "
+            f"{ch.get('airport', '')} {name}{freq}. "
+            "Ask for it without the frequency to play it, or use "
+            "'list ATC channels' to see what's available."
+        )
+
     url = stream_url(ch["mount"])
     label = f"{ch.get('airport', '')} {ch.get('name', ch['mount'])}"
     if ch.get("freq"):

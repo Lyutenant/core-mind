@@ -1,7 +1,5 @@
-// Paste this in your browser console on any LiveATC airport search page:
-//   https://www.liveatc.net/search/?icao=KIAD
-//   https://www.liveatc.net/search/?icao=KDCA
-//   etc.
+// Paste this in your browser console on any LiveATC airport search page
+// (the page whose address ends in /search/?icao=KIAD, /search/?icao=KDCA, etc.)
 //
 // It outputs a JSON array — copy it and append to data/browser_mounts.json.
 // Run once per airport page. The scraper reads browser_mounts.json automatically.
@@ -32,7 +30,7 @@
   });
 
   if (feeds.length === 0) {
-    console.warn('No feeds found. Are you on a liveatc.net/search/?icao=XXXX page?');
+    console.warn('No feeds found. Are you on a LiveATC /search/?icao=XXXX page?');
     return;
   }
 

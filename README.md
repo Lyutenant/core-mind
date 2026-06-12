@@ -95,6 +95,7 @@ coremind atc js                         # instructions for obfuscated-mount airp
 coremind atc scan KXXX --browser-mounts ~/browser-mounts.json
 coremind atc add KIAD "Tower" kiad1_twr_1c19c_120250 --freq 120.250
 coremind atc test "KIAD tower"          # test ATC stream without starting the voice loop
+coremind atc test "KIAD tower 120.250"  # a frequency pins the exact channel
 
 # Diagnostics — any device
 coremind doctor                         # check Python, config, audio, Ollama, STT, TTS

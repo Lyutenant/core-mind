@@ -4,12 +4,13 @@
 # Caddy listens on the Pi's Tailscale interface and allows only the Hub
 # (Mac Mini); other tailnet devices get 403.
 #
-# Why bind the Tailscale IP here (unlike the Hub's ":8765" wildcard)?
-# On Linux, a wildcard bind on :8767 conflicts with the MCP server's
-# 127.0.0.1:8767 bind ("address already in use"), so Caddy must bind a
-# specific interface address. This means Caddy fails to start if
-# Tailscale is not up yet — see docs/setup-node.md for the systemd
-# ordering fix.
+# Why the explicit `bind` directive (unlike the Hub's ":8765" wildcard)?
+# A site address like "http://100.x.x.x:8767" only matches the Host
+# header — Caddy still binds the wildcard 0.0.0.0:8767, which on Linux
+# conflicts with the MCP server's 127.0.0.1:8767 bind ("address already
+# in use"). The `bind` directive is what restricts the listener to the
+# Tailscale interface. This means Caddy fails to start if Tailscale is
+# not up yet — see docs/setup-node.md for the systemd ordering fix.
 #
 # Usage:
 #   1. Install Caddy on the Pi: https://caddyserver.com/docs/install
@@ -25,12 +26,22 @@
 #         transport: http
 #         url: http://100.x.x.x:8767   # Pi's Tailscale IP
 
-http://100.x.x.x:8767 {
-    # Allow only the Hub (Mac Mini's Tailscale IP)
-    @hub remote_ip 100.y.y.y
+{
+    auto_https off
+}
+
+:8767 {
+    # Listen only on the Pi's Tailscale IP (avoids the 8767 port conflict)
+    bind 100.x.x.x
+
+    # Allow the Hub (Mac Mini, 100.y.y.y) + the Pi itself (100.x.x.x) for
+    # local testing. Caddy only listens on the Tailscale IP, so a local
+    # `curl http://100.x.x.x:8767` arrives from the Pi's own Tailscale
+    # address — never from loopback.
+    @hub remote_ip 100.x.x.x 100.y.y.y
 
     handle @hub {
-        reverse_proxy localhost:8767 {
+        reverse_proxy 127.0.0.1:8767 {
             header_up Host localhost:8767
         }
     }

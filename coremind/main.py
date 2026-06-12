@@ -920,6 +920,7 @@ def atc_scan(
     from coremind.node_mcp.atc_catalog import (
         ATCCatalog,
         load_atc_catalog,
+        pls_url,
         save_atc_catalog,
     )
 
@@ -957,9 +958,8 @@ def atc_scan(
 
     def probe(mount: str) -> tuple[bool, str]:
         """Return (valid, title). Rate-limited."""
-        pls_url = f"https://www.liveatc.net/play/{mount}.pls"
         try:
-            r = httpx.get(pls_url, timeout=8.0, follow_redirects=True,
+            r = httpx.get(pls_url(mount), timeout=8.0, follow_redirects=True,
                           headers={"User-Agent": "Mozilla/5.0"})
             body = r.text.strip()
             if r.status_code == 200 and body.startswith("[playlist]"):
@@ -1042,8 +1042,9 @@ def atc_js() -> None:
     """
     js_path = _ATC_JS_SNIPPET
     console.print("\n[bold]Step 1 — Open LiveATC in your browser[/bold]")
-    console.print("  Go to: https://www.liveatc.net/search/?icao=KIAD")
-    console.print("  (replace KIAD with the airport you want)\n")
+    console.print("  Go to the LiveATC airport search page for your airport")
+    console.print("  (the page whose address ends in /search/?icao=KIAD —")
+    console.print("  replace KIAD with the airport you want)\n")
     console.print("[bold]Step 2 — Run the JavaScript snippet[/bold]")
     console.print("  Open DevTools → Console, paste the contents of:")
     console.print(f"  [cyan]{js_path}[/cyan]\n")
@@ -1117,7 +1118,14 @@ def atc_test(
     import subprocess
     import time
 
-    from coremind.node_mcp.atc_catalog import ATCCatalog, load_atc_catalog, stream_url
+    from coremind.node_mcp.atc_catalog import (
+        ATCCatalog,
+        load_atc_catalog,
+        matches_query_frequency,
+        pick_tower_candidate,
+        pls_url,
+        stream_url,
+    )
 
     settings = _get_settings()
     catalog_path = Path(catalog).expanduser() if catalog else Path(settings.node_mcp.atc_catalog_path).expanduser()
@@ -1142,27 +1150,42 @@ def atc_test(
         raise typer.Exit(1)
 
     if len(candidates) > 1:
-        console.print(f"[yellow]{len(candidates)} channels matched (ambiguous):[/yellow]")
-        for ch in candidates:
-            freq_str = f"  {ch['freq']} MHz" if ch.get("freq") else ""
-            console.print(f"  {ch['airport']} | {ch['name']}{freq_str}  →  {ch['mount']}")
-        console.print("Re-run with a more specific query.")
-        raise typer.Exit(1)
+        picked = pick_tower_candidate(candidates, query)
+        if picked is not None:
+            console.print(
+                f"[dim]{len(candidates)} tower channels tied — picked one at random "
+                f"(same behavior as the voice loop).[/dim]"
+            )
+            candidates = [picked]
+        else:
+            console.print(f"[yellow]{len(candidates)} channels matched (ambiguous):[/yellow]")
+            for ch in candidates:
+                freq_str = f"  {ch['freq']} MHz" if ch.get("freq") else ""
+                console.print(f"  {ch['airport']} | {ch['name']}{freq_str}  →  {ch['mount']}")
+            console.print("Re-run with a more specific query.")
+            raise typer.Exit(1)
 
     ch = candidates[0]
+    if matches_query_frequency(ch, query) is False:
+        console.print(
+            f"[red]The requested frequency does not match this channel "
+            f"(same behavior as the voice loop — it would not stream).[/red]\n"
+            f"  Closest match: {ch.get('airport', '')} {ch.get('name', ch['mount'])}"
+        )
+        console.print("Re-run without the frequency to test this channel.")
+        raise typer.Exit(1)
+
     url = stream_url(ch["mount"])
     label = f"{ch.get('airport', '')} {ch.get('name', ch['mount'])}"
     freq_str = f" ({ch['freq']} MHz)" if ch.get("freq") else ""
     console.print(f"\nMatch: [bold]{label}{freq_str}[/bold]")
     console.print(f"Mount: [cyan]{ch['mount']}[/cyan]")
-    console.print(f"URL:   [cyan]{url}[/cyan]")
 
     # Verify mount is reachable before spawning mpv
     try:
         import httpx
-        pls_url = f"https://www.liveatc.net/play/{ch['mount']}.pls"
-        console.print(f"\nChecking PLS endpoint: [dim]{pls_url}[/dim]")
-        r = httpx.get(pls_url, timeout=8.0, follow_redirects=True)
+        console.print(f"\nChecking PLS endpoint for mount [cyan]{ch['mount']}[/cyan]…")
+        r = httpx.get(pls_url(ch["mount"]), timeout=8.0, follow_redirects=True)
         if r.status_code == 200 and "[playlist]" in r.text:
             console.print("[green]✓ PLS responds — mount is valid[/green]")
         else:

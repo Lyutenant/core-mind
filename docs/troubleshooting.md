@@ -61,6 +61,15 @@ If `mcp` is empty:
 3. Check Hub logs for `"initial connection failed"` — the Hub retries automatically; wait ~10 s after the Node starts.
 4. If using Caddy on the Pi, confirm Caddy is running (`systemctl status caddy`) and the Tailscale IP in the Hub config matches the Pi's IP (`tailscale ip -4`).
 
+Caddy-on-the-Pi failure signatures (see `Caddyfile.node.example` for the working config):
+
+| Symptom | Cause |
+|---------|-------|
+| Caddy fails to start: `address already in use` | Missing `bind 100.x.x.x` — without it Caddy binds the wildcard `0.0.0.0:8767`, which conflicts with the MCP server's `127.0.0.1:8767` |
+| Caddy fails at boot but starts manually | Caddy started before Tailscale was up — add the systemd ordering override (see `docs/setup-node.md`) |
+| Hub gets **403** | `remote_ip` allowlist doesn't include the Hub's Tailscale IP |
+| Hub gets **421** | Missing `header_up Host localhost:8767` (the port suffix is required) |
+
 ---
 
 ## ATC stream not playing
@@ -70,7 +79,18 @@ Use the built-in test command to diagnose without the voice loop:
 coremind atc test "KIAD tower"
 ```
 
-This checks the LiveATC PLS endpoint for liveness and runs mpv with visible stderr — if mpv is failing silently during normal playback, the error will appear here.
+This checks the LiveATC PLS endpoint for liveness and runs mpv with visible stderr — if mpv is failing silently during normal playback, the error will appear here. It resolves the query exactly like the voice loop, including the tower default and random tower pick.
+
+---
+
+## ATC plays an unexpected channel (or asks instead of playing)
+
+This is usually the channel matcher, not a streaming problem (see [Tools — channel selection](tools.md#live-atc-streaming)):
+
+- **Naming only an airport plays a tower** — that's the default. Say a channel type ("ground", "atis", "approach"…) for anything else.
+- **A different tower plays each time** — airports with per-runway towers (KIAD, KATL, …) pick one primary tower at random. Say a frequency ("Dulles tower 120.250") to pin one.
+- **It asks "which would you like?"** — several same-type channels matched (e.g. multiple ground frequencies). Answer with a distinguishing word from the list or a frequency.
+- **It refuses with "No channel matches that frequency"** — the spoken frequency is stale/mistyped, or the catalog entry has no frequency data to confirm against. Re-ask without the frequency, or fix the entry with `coremind atc add ... --freq`.
 
 ---
 
