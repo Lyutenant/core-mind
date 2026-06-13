@@ -143,20 +143,29 @@ class VoiceLoop:
 
         while True:
             time.sleep(30)
-            try:
-                httpx.post(
-                    f"{base}/v1/nodes/{node_id}/heartbeat",
-                    timeout=5.0,
-                )
-            except Exception as e:
-                logger.debug("Heartbeat failed: %s", e)
+            self._hub_sync_tick(httpx, base, node_id, name, hostname)
 
-            try:
-                r = httpx.get(f"{base}/v1/nodes/{node_id}/config", timeout=5.0)
-                if r.status_code == 200:
-                    self._apply_node_config(r.json())
-            except Exception as e:
-                logger.debug("Config poll failed: %s", e)
+    def _hub_sync_tick(self, httpx, base: str, node_id: str, name: str, hostname: str) -> None:
+        """One heartbeat + config-poll cycle; re-registers if the Hub forgot us."""
+        try:
+            r = httpx.post(
+                f"{base}/v1/nodes/{node_id}/heartbeat",
+                timeout=5.0,
+            )
+            if r.status_code == 404:
+                # Hub restarted and lost its in-memory registry
+                logger.info("Hub no longer knows this node — re-registering")
+                self._hub_register(httpx, base, node_id, name, hostname)
+                return
+        except Exception as e:
+            logger.debug("Heartbeat failed: %s", e)
+
+        try:
+            r = httpx.get(f"{base}/v1/nodes/{node_id}/config", timeout=5.0)
+            if r.status_code == 200:
+                self._apply_node_config(r.json())
+        except Exception as e:
+            logger.debug("Config poll failed: %s", e)
 
     def _build_config_snapshot(self) -> dict:
         """Current values of all Hub-overrideable settings, sent on registration."""

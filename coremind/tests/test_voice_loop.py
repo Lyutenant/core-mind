@@ -143,3 +143,62 @@ def test_voice_loop_includes_system_prompt_in_messages(mocker):
 
     assert captured[0]["role"] == "system"
     assert "Jarvis" in captured[0]["content"]
+
+
+# ---------------------------------------------------------------------------
+# Hub sync tests
+# ---------------------------------------------------------------------------
+
+def _make_sync_loop(mocker):
+    from coremind.audio_input.recorder import Recorder
+    from coremind.voice_loop import VoiceLoop
+
+    recorder = Recorder()
+    mocker.patch.object(recorder, "record")
+    # No remote_url → the sync daemon thread is not started; we drive ticks manually.
+    return VoiceLoop(name="Bot", recorder=recorder, stt=MockSTT(),
+                     brain=MockBrainClient(), memory=SessionMemory())
+
+
+def test_hub_sync_tick_reregisters_on_404(mocker):
+    """A 404 heartbeat means the Hub restarted and lost its registry — re-register."""
+    loop = _make_sync_loop(mocker)
+    register = mocker.patch.object(loop, "_hub_register")
+
+    fake_httpx = mocker.Mock()
+    fake_httpx.post.return_value = mocker.Mock(status_code=404)
+
+    loop._hub_sync_tick(fake_httpx, "http://hub:8765", "abc123", "Bot", "pi")
+
+    register.assert_called_once_with(fake_httpx, "http://hub:8765", "abc123", "Bot", "pi")
+    fake_httpx.get.assert_not_called()  # config poll skipped until re-registered
+
+
+def test_hub_sync_tick_polls_config_when_heartbeat_ok(mocker):
+    loop = _make_sync_loop(mocker)
+    register = mocker.patch.object(loop, "_hub_register")
+    apply_config = mocker.patch.object(loop, "_apply_node_config")
+
+    fake_httpx = mocker.Mock()
+    fake_httpx.post.return_value = mocker.Mock(status_code=200)
+    fake_httpx.get.return_value = mocker.Mock(
+        status_code=200, json=lambda: {"follow_up_seconds": 5.0}
+    )
+
+    loop._hub_sync_tick(fake_httpx, "http://hub:8765", "abc123", "Bot", "pi")
+
+    register.assert_not_called()
+    apply_config.assert_called_once_with({"follow_up_seconds": 5.0})
+
+
+def test_hub_sync_tick_survives_hub_unreachable(mocker):
+    loop = _make_sync_loop(mocker)
+    register = mocker.patch.object(loop, "_hub_register")
+
+    fake_httpx = mocker.Mock()
+    fake_httpx.post.side_effect = ConnectionError("hub down")
+    fake_httpx.get.side_effect = ConnectionError("hub down")
+
+    loop._hub_sync_tick(fake_httpx, "http://hub:8765", "abc123", "Bot", "pi")
+
+    register.assert_not_called()
