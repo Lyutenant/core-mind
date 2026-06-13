@@ -1,6 +1,6 @@
 # CoreMind
 
-A two-component voice assistant. The Pi handles audio I/O and wake word; a Mac Mini runs all inference.
+**v0.4.7** · A two-component voice assistant. The Pi handles audio I/O and wake word; a Mac Mini runs all inference.
 
 ```
 [CoreMind Node]  ──audio──▶  [CoreMind Hub]  ──▶  Ollama LLM
@@ -20,7 +20,7 @@ A two-component voice assistant. The Pi handles audio I/O and wake word; a Mac M
 | Component | Role |
 |-----------|------|
 | Raspberry Pi 5, 8 GB | CoreMind Node |
-| USB microphone or ReSpeaker XVF3800 | connected to Pi |
+| USB microphone (ReSpeaker XVF3800 works as a plain mic) | connected to Pi |
 | Speaker (USB, 3.5 mm, or HDMI) | connected to Pi |
 | Mac Mini | CoreMind Hub — runs Ollama + Hub server |
 | Tailscale | private network between Pi and Mac Mini |
@@ -34,8 +34,9 @@ A two-component voice assistant. The Pi handles audio I/O and wake word; a Mac M
 brew install portaudio espeak-ng
 git clone https://github.com/Lyutenant/core-mind.git && cd core-mind
 python3.11 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev,stt,server]"
-cp config.hub.example.yaml config.yaml   # then edit
+pip install -e ".[dev,stt,server,tools]"   # tools = MCP client for music/ATC
+pip install piper-tts                       # optional: better TTS than espeak (see Hub Setup)
+cp config.hub.example.yaml config.yaml      # starting point; tune the rest from the dashboard
 coremind server --host 0.0.0.0
 ```
 
@@ -45,11 +46,19 @@ sudo apt install -y git libportaudio2 portaudio19-dev python3.11 python3.11-venv
 git clone https://github.com/Lyutenant/core-mind.git && cd core-mind
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-cp config.node.example.yaml config.yaml  # then edit Hub URL + audio devices
+
+# Wake word (required for always-on "Hey Jarvis"; see Node Setup for details)
+pip install 'coremind[wake_word]'           # onnxruntime inference backend
+pip install openwakeword --no-deps          # tflite has no Pi ARM64 wheel
+python -c "import openwakeword; openwakeword.utils.download_models()"
+
+cp config.node.example.yaml config.yaml     # then edit Hub URL + audio devices
 coremind run
 ```
 
-Open **http://localhost:8765** on the Mac Mini for the dashboard.
+Open **http://localhost:8765** on the Mac Mini for the dashboard — the primary place to
+configure CoreMind (assistant name, personality, STT/TTS/LLM, tools). No YAML editing needed
+after first start.
 
 > **Exposing the Hub to the Pi over Tailscale:** `coremind server` binds to `127.0.0.1` by default. To let the Pi reach it, either set up [Caddy on the Mac Mini](docs/setup-hub.md#7-caddy-reverse-proxy) (recommended) or run `coremind server --host 0.0.0.0` for a simpler but less secure alternative.
 
@@ -132,22 +141,24 @@ coremind/
 
 ---
 
-## Roadmap
+## Status
 
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 0–6 | Repo, audio, STT, LLM, TTS, push-to-talk MVP | ✓ |
-| 7 | Wake word (openwakeword) | ✓ |
-| 8 | Voice activity detection | ✓ |
-| 9 | Hub web server + dashboard | ✓ |
-| 10a | Built-in tools (time, weather, aviation weather, airport) | ✓ |
-| 10b | Hub MCP client (connect to any MCP server) | ✓ |
-| 10c | Node MCP server + music player + mic isolation | ✓ |
-| 12 | systemd user service | ✓ |
-| 13 | `coremind doctor` diagnostics | ✓ |
-| 14 | Node auto-registration + Nodes panel | ✓ |
-| 15 | Mobile-responsive dashboard | ✓ |
-| 16 | Follow-up loop safety | ✓ |
-| 34 | Music catalog (artist/album/playlist + voice CRUD) | ✓ |
-| 35 | Live ATC streaming (17 MCP tools) | ✓ |
-| 36 | Bundled ICAO airport database (19K airports) | ✓ |
+Implemented and working (v0.4.7):
+
+- Full voice pipeline on real hardware: wake word (openwakeword/onnx) → VAD → faster-whisper → Ollama → Piper/espeak
+- Hub web dashboard: chat, Nodes panel, Settings editor, Tools panel — mobile-responsive
+- Configurable assistant personality (free-text persona/tone, with presets)
+- Session memory + follow-up listening window with safety mechanisms
+- Built-in tools (time, weather, aviation weather, airport) + offline 19K-airport ICAO database
+- Hub MCP client (stdio + HTTP/SSE, auto-reconnect) and Node MCP server (13 music + 4 ATC tools)
+- Music catalog from folder structure; LiveATC streaming with scored channel matching and frequency pinning
+- Node auto-registration with heartbeat; `coremind doctor` diagnostics; systemd user service on the Pi
+- Loopback-by-default binding with Caddy reverse-proxy examples
+
+## Planned
+
+- **Porcupine wake word** — custom "Hey CoreMind" phrase via Picovoice `.ppn` model
+- **WebRTC VAD** — optional upgrade from the energy-threshold VAD for noisy rooms
+- **Long-term memory** — deferred until the voice loop is fully reliable; no vector DB yet
+- **More MCP integrations** — home automation, calendars, etc. (all via MCP, not bespoke code)
+- **Audio refinements** — Bluetooth speakers, ReSpeaker XVF3800 echo cancellation / DoA
