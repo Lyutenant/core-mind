@@ -359,16 +359,24 @@ try:
     @app.post("/api/config")
     async def save_config(request: Request):
         data = await request.json()
-        # Validate against Settings model before writing
+        from coremind.config.settings import Settings, merge_config_text
+
+        # The dashboard only sends the sections it renders. Merge onto the
+        # existing file so unmanaged sections (tools.mcp_servers, node_mcp, …)
+        # and comments are preserved instead of being wiped to defaults.
+        existing = _config_path.read_text() if _config_path.exists() else ""
         try:
-            from coremind.config.settings import Settings
-            Settings.model_validate(data)
+            merged_text = merge_config_text(existing, data)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to merge config: {e}")
+
+        # Validate the MERGED result — that is what gets written and reloaded.
+        try:
+            Settings.model_validate(yaml.safe_load(merged_text) or {})
         except Exception as e:
             raise HTTPException(status_code=422, detail=str(e))
         try:
-            _config_path.write_text(
-                yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
-            )
+            _config_path.write_text(merged_text)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to write config: {e}")
         _reset_singletons()

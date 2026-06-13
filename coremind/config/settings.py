@@ -204,6 +204,58 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _deep_merge_inplace(base, override: dict) -> None:
+    """Merge ``override`` into ``base`` in place.
+
+    Mutating in place (rather than rebuilding) is what lets a ruamel.yaml
+    ``CommentedMap`` keep the comment tokens attached to its existing keys:
+    reassigning a value preserves the comment, recursing preserves nested
+    comments, and a null value overwrites (so clearing a field still works).
+    Works equally on a plain ``dict``.
+    """
+    for k, v in override.items():
+        existing = base.get(k) if hasattr(base, "get") else None
+        if isinstance(existing, dict) and isinstance(v, dict):
+            _deep_merge_inplace(existing, v)
+        else:
+            base[k] = v
+
+
+def merge_config_text(existing_text: str, incoming: dict) -> str:
+    """Merge a partial config payload onto the existing config YAML text.
+
+    The Hub dashboard only POSTs the sections it renders; writing that partial
+    object straight to disk would wipe every unmanaged section (``tools``,
+    ``node_mcp``, …) and unmanaged keys (``app.home_airport`` …) back to their
+    model defaults. Merging onto the on-disk text instead preserves them.
+
+    Uses ruamel.yaml round-trip mode so comments and key order survive the
+    rewrite. Falls back to PyYAML when ruamel is not installed — that loses
+    comments but still preserves all sections (the critical fix), so a missing
+    optional dependency never breaks saving.
+    """
+    try:
+        from io import StringIO
+
+        from ruamel.yaml import YAML
+    except ImportError:
+        base = yaml.safe_load(existing_text) if existing_text.strip() else {}
+        merged = _deep_merge(base or {}, incoming)
+        return yaml.dump(
+            merged, default_flow_style=False, allow_unicode=True, sort_keys=False
+        )
+
+    ruamel = YAML()  # round-trip: preserves comments + order
+    ruamel.preserve_quotes = True
+    base = ruamel.load(existing_text) if existing_text.strip() else None
+    if base is None:
+        base = ruamel.load("{}")
+    _deep_merge_inplace(base, incoming)
+    buf = StringIO()
+    ruamel.dump(base, buf)
+    return buf.getvalue()
+
+
 def load_settings(config_path: str = "config.yaml") -> Settings:
     path = Path(config_path)
     yaml_data: dict = {}
