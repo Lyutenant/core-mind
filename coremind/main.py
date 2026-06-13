@@ -324,6 +324,7 @@ def _build_voice_loop(
 
     return VoiceLoop(
         name=settings.app.name,
+        personality=settings.app.personality,
         recorder=recorder,
         stt=stt,
         brain=brain,

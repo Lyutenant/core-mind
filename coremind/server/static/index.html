@@ -812,6 +812,17 @@
                 <input type="text" id="app.name" placeholder="Jarvis">
                 <span class="hint">Used in responses and the system prompt. Must match on Hub and Node.</span>
               </div>
+              <div class="field" style="grid-column:1/-1">
+                <label>Personality</label>
+                <textarea id="app.personality" rows="3" placeholder="Describe how the assistant should talk — its tone and persona. Leave blank for neutral."></textarea>
+                <div class="persona-presets" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+                  <button type="button" class="btn" style="padding:4px 10px;font-size:12px;min-height:0" data-persona="jarvis">JARVIS</button>
+                  <button type="button" class="btn" style="padding:4px 10px;font-size:12px;min-height:0" data-persona="witty">Witty</button>
+                  <button type="button" class="btn" style="padding:4px 10px;font-size:12px;min-height:0" data-persona="formal">Formal</button>
+                  <button type="button" class="btn" style="padding:4px 10px;font-size:12px;min-height:0" data-persona="">Neutral</button>
+                </div>
+                <span class="hint">Shapes the assistant's tone in every reply (voice and chat). Presets fill the box above — edit freely.</span>
+              </div>
               <div class="field">
                 <label>Log Level</label>
                 <select id="app.log_level">
@@ -1617,7 +1628,7 @@ function buildConfig() {
 
   return {
     mode,
-    app:    { name: g('app.name'), log_level: g('app.log_level') },
+    app:    { name: g('app.name'), log_level: g('app.log_level'), personality: g('app.personality') },
     runtime: { mode: 'push_to_talk', require_confirmation_for_actions: true },
     audio: {
       input_device:   n('audio.input_device', true),
@@ -2003,8 +2014,26 @@ async function sendChat() {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
+const PERSONA_PRESETS = {
+  jarvis: "A refined British butler: impeccably polite and unflappably calm, with dry, understated wit. Address the user as \"sir\". Be efficient and proactive, offering crisp observations without rambling.",
+  witty: "Playful and clever: quick with light humor and the occasional pun, while still being genuinely helpful and to the point.",
+  formal: "Formal and professional: precise, courteous, and measured. Avoid slang and contractions; keep a respectful, businesslike tone.",
+};
+
+function wirePersonaPresets() {
+  const ta = document.getElementById('app.personality');
+  if (!ta) return;
+  document.querySelectorAll('[data-persona]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.persona;
+      ta.value = key ? (PERSONA_PRESETS[key] || '') : '';
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   onModeChange('hub');   // set initial tab visibility before health loads
+  wirePersonaPresets();
   connectSSE();
   refreshHealth();
   loadConversation();

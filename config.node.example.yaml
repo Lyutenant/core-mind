@@ -8,6 +8,8 @@ mode: node   # this device records audio and sends it to the Hub
 app:
   name: Jarvis   # must match the Hub's name exactly
   log_level: INFO
+  # personality: null   # only used in standalone/local mode; in remote-brain mode the Hub's
+                        # config controls the persona. Free-text tone appended to the system prompt.
   # The fields below are only used when remote_brain is disabled (standalone/local mode).
   # In remote-brain mode the Hub's config.yaml controls these instead.
   # user_location: "San Francisco, CA"   # fallback location for weather questions

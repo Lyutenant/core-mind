@@ -20,6 +20,7 @@ _ENV_DELIMITER = "__"
 class AppConfig(BaseModel):
     name: str = "CoreMind"
     log_level: str = "INFO"
+    personality: Optional[str] = None     # free-text persona/tone appended to the system prompt
     user_location: Optional[str] = None   # e.g. "San Francisco, CA"
     user_timezone: Optional[str] = None   # IANA tz name e.g. "America/Los_Angeles"
     home_airport: Optional[str] = None    # ICAO code e.g. "KJYO"

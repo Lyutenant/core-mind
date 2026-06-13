@@ -82,8 +82,10 @@ class VoiceLoop:
         config_mtime: float = 0.0,
         on_listening_start: Callable[[], None] | None = None,
         on_turn_complete: Callable[[], None] | None = None,
+        personality: str | None = None,
     ) -> None:
         self._name = name
+        self._personality = personality
         self._recorder = recorder
         self._stt = stt
         self._brain = brain
@@ -123,7 +125,13 @@ class VoiceLoop:
             self._node_id = None
 
     def _system_messages(self) -> list[dict]:
-        return [{"role": "system", "content": _SYSTEM_PROMPT.format(name=self._name)}]
+        content = _SYSTEM_PROMPT.format(name=self._name)
+        if self._personality:
+            content += (
+                " Adopt the following persona and tone in all responses, while "
+                f"staying accurate and concise: {self._personality}"
+            )
+        return [{"role": "system", "content": content}]
 
     # ------------------------------------------------------------------
     # Node ↔ Hub sync (registration, heartbeat, config hot-reload)

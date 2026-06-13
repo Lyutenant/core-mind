@@ -62,6 +62,11 @@ def _build_system_prompt(s) -> str:
         "Keep responses concise and conversational.",
         "Avoid using markdown — your response will be spoken aloud.",
     ]
+    if s.app.personality:
+        parts.append(
+            "Adopt the following persona and tone in all responses, while staying "
+            f"accurate and concise: {s.app.personality}"
+        )
     if s.app.user_location:
         location_uses = "weather"
         if s.app.user_timezone:

@@ -145,6 +145,36 @@ def test_voice_loop_includes_system_prompt_in_messages(mocker):
     assert "Jarvis" in captured[0]["content"]
 
 
+def test_voice_loop_appends_personality_to_system_prompt(mocker):
+    from coremind.audio_input.recorder import Recorder
+    from coremind.voice_loop import VoiceLoop
+
+    recorder = Recorder()
+    mocker.patch.object(recorder, "record")
+
+    stt = MockSTT()
+    mocker.patch.object(stt, "transcribe", return_value="hi")
+
+    brain = MockBrainClient()
+    captured = []
+    mocker.patch.object(brain, "ask", side_effect=lambda msgs: captured.extend(msgs) or "ok")
+
+    loop = VoiceLoop(
+        name="Jarvis", recorder=recorder, stt=stt, brain=brain,
+        memory=SessionMemory(), personality="A refined British butler.",
+    )
+    loop.run_once()
+
+    assert captured[0]["role"] == "system"
+    assert "A refined British butler." in captured[0]["content"]
+
+
+def test_voice_loop_no_personality_clause_when_unset(mocker):
+    loop = _make_loop(mocker)
+    content = loop._system_messages()[0]["content"]
+    assert "persona" not in content.lower()
+
+
 # ---------------------------------------------------------------------------
 # Hub sync tests
 # ---------------------------------------------------------------------------
