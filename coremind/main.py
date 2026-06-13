@@ -205,7 +205,15 @@ def _build_voice_loop(
         stt_provider = settings.stt.provider
         if stt_provider == "whisper_local":
             try:
-                stt = WhisperLocalSTT(model=settings.stt.model, language=settings.stt.language)
+                stt = WhisperLocalSTT(
+                    model=settings.stt.model,
+                    language=settings.stt.language,
+                    compute_type=settings.stt.compute_type,
+                    beam_size=settings.stt.beam_size,
+                    vad_filter=settings.stt.vad_filter,
+                    initial_prompt=settings.stt.initial_prompt,
+                    hotwords=settings.stt.hotwords,
+                )
             except STTError:
                 console.print(
                     "[yellow]Warning:[/yellow] faster-whisper not installed — using MockSTT. "

@@ -55,6 +55,14 @@ class STTConfig(BaseModel):
     provider: str = "whisper_local"
     model: str = "small"
     language: str = "en"
+    # Accuracy/quality knobs (whisper_local only).
+    compute_type: str = "int8"          # int8 | int8_float32 | float32 — higher = more accurate, slower
+    beam_size: int = 5                  # higher = more accurate, slower
+    vad_filter: bool = False            # Silero VAD: strip silence/noise before decoding
+    # Decoder biasing toward your vocabulary/jargon — the practical substitute
+    # for fine-tuning on your own voice. Both are optional free text.
+    initial_prompt: Optional[str] = None  # context sentence(s) fed to the decoder
+    hotwords: Optional[str] = None        # comma/space-separated words to bias toward
 
 
 class TTSConfig(BaseModel):

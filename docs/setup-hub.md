@@ -86,6 +86,11 @@ stt:
   model: distil-large-v3    # tiny / base / small / medium / distil-large-v3 / large-v3
                             # distil-large-v3 recommended: small models (tiny/base)
                             # mishear accents and proper nouns
+  compute_type: int8_float32  # int8 (fastest) / int8_float32 / float32 (most accurate)
+  beam_size: 8                # higher = more accurate, slower (5–8 is a good range)
+  vad_filter: true            # drop silence/noise before decoding
+  hotwords: "CoreMind, KJYO, METAR, Ollama"   # bias decoding toward your vocabulary
+  initial_prompt: "Aviation and home-assistant voice commands."
 
 tts:
   provider: piper_local
@@ -102,6 +107,27 @@ tools:
 ```
 
 See [Tools](tools.md) for MCP server config (music, ATC, etc.).
+
+### Improving recognition accuracy
+
+If distil-large-v3 still mishears your speech, tune these before reaching for a
+bigger model (all editable in the dashboard **Settings → STT** tab):
+
+- **`hotwords`** — a comma/space-separated list of names, jargon, and ICAO codes
+  to bias the decoder toward. This is the practical substitute for fine-tuning on
+  your own voice: add the specific words Whisper keeps getting wrong and grow the
+  list over time. (Requires faster-whisper ≥ 1.0; older versions fold the list
+  into `initial_prompt` automatically.)
+- **`initial_prompt`** — a short context sentence describing your domain, which
+  nudges spelling and word choice.
+- **`vad_filter: true`** — strips silence/noise before decoding, which cuts the
+  hallucinated text Whisper sometimes emits during pauses.
+- **`beam_size: 8`** and **`compute_type: int8_float32`** — trade a little speed
+  for accuracy. The Mac Mini can usually afford both.
+
+True fine-tuning on recordings of your voice is possible but heavy (needs labeled
+audio, a GPU run, and re-export to CTranslate2 format) — the knobs above solve
+most accuracy problems without it.
 
 ---
 

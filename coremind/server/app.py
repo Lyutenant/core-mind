@@ -103,7 +103,15 @@ def _get_stt():
     if _stt is None:
         from coremind.stt.whisper_local import WhisperLocalSTT
         s = _get_settings()
-        _stt = WhisperLocalSTT(model=s.stt.model, language=s.stt.language)
+        _stt = WhisperLocalSTT(
+            model=s.stt.model,
+            language=s.stt.language,
+            compute_type=s.stt.compute_type,
+            beam_size=s.stt.beam_size,
+            vad_filter=s.stt.vad_filter,
+            initial_prompt=s.stt.initial_prompt,
+            hotwords=s.stt.hotwords,
+        )
         logger.info("STT loaded: %s", s.stt.model)
     return _stt
 

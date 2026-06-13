@@ -852,6 +852,41 @@
                 <input type="text" id="stt.language" placeholder="en">
                 <span class="hint">BCP-47 code, e.g. en, zh, fr, de.</span>
               </div>
+              <div class="field">
+                <label>Hotwords</label>
+                <input type="text" id="stt.hotwords" placeholder="CoreMind, KJYO, METAR, Ollama, Piper">
+                <span class="hint">Comma/space-separated words to bias the decoder toward — names, jargon, ICAO codes. The practical substitute for training on your voice.</span>
+              </div>
+              <div class="field">
+                <label>Initial Prompt</label>
+                <input type="text" id="stt.initial_prompt" placeholder="Aviation and home-assistant voice commands.">
+                <span class="hint">Context sentence fed to the decoder to nudge spelling/word choice toward your domain.</span>
+              </div>
+              <div class="field">
+                <label>Compute Type</label>
+                <select id="stt.compute_type">
+                  <option value="int8">int8 — fastest, lowest memory</option>
+                  <option value="int8_float32">int8_float32 — more accurate, a bit slower</option>
+                  <option value="float32">float32 — most accurate, slowest</option>
+                </select>
+                <span class="hint">Higher precision trades speed for accuracy. The Mac Mini can usually afford int8_float32.</span>
+              </div>
+              <div class="field">
+                <label>Beam Size</label>
+                <input type="number" id="stt.beam_size" min="1" max="10" placeholder="5">
+                <span class="hint">Higher = more accurate, slower. 5–8 is a good range on the Hub.</span>
+              </div>
+              <div class="field">
+                <label class="toggle-row">
+                  <span class="toggle-label">VAD filter</span>
+                  <label class="toggle">
+                    <input type="checkbox" id="stt.vad_filter">
+                    <span class="toggle-track"></span>
+                    <span class="toggle-thumb"></span>
+                  </label>
+                </label>
+                <span class="hint">Strip silence/noise before decoding (Silero VAD). Reduces hallucinated text in pauses.</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1595,6 +1630,11 @@ function buildConfig() {
       provider: g('stt.provider'),
       model: (g('stt.model') || 'base').split(' ')[0],
       language: g('stt.language'),
+      compute_type: g('stt.compute_type') || 'int8',
+      beam_size: n('stt.beam_size') || 5,
+      vad_filter: g('stt.vad_filter'),
+      initial_prompt: g('stt.initial_prompt', true),
+      hotwords: g('stt.hotwords', true),
     },
     tts: {
       provider: g('tts.provider'),

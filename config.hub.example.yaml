@@ -34,6 +34,17 @@ stt:
   #   large-v3        — most accurate, very slow on CPU, ~3 GB download
   model: distil-large-v3
   language: en
+  # Accuracy tuning (whisper_local). The Mac Mini can afford higher settings.
+  #   compute_type: int8 (fastest) | int8_float32 | float32 (most accurate)
+  #   beam_size:    higher = more accurate, slower (5–8 is a good range)
+  #   vad_filter:   strip silence/noise before decoding; cuts pause-hallucinations
+  compute_type: int8_float32
+  beam_size: 8
+  vad_filter: true
+  # Bias the decoder toward your vocabulary — the practical substitute for
+  # fine-tuning on your own voice. Add the names/jargon Whisper keeps mangling.
+  hotwords: "CoreMind, KJYO, KIAD, METAR, TAF, Ollama, Piper, Tailscale"
+  initial_prompt: "Aviation and home-assistant voice commands."
 
 tts:
   # provider options:
