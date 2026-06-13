@@ -24,10 +24,15 @@ stt:
   # provider: whisper_local (recommended) or mock (silent, for testing)
   provider: whisper_local
   # Model size — speed vs accuracy on Mac CPU:
-  #   tiny  — fastest (~0.5s/clip),  ~75 MB download
-  #   base  — good balance (~1s/clip), ~140 MB download  ← recommended
-  #   small — more accurate (~2s/clip), ~460 MB download
-  model: base
+  #   tiny            — fastest (~0.5s/clip), ~75 MB download
+  #   base            — fast (~1s/clip), ~140 MB download
+  #   small           — balanced (~2s/clip), ~460 MB download
+  #   medium          — accurate, slower, ~1.5 GB download
+  #   distil-large-v3 — near large-v3 accuracy at ~2x its speed, English only,
+  #                     ~1.5 GB download  ← recommended if accents/proper nouns
+  #                     are misheard on smaller models
+  #   large-v3        — most accurate, very slow on CPU, ~3 GB download
+  model: distil-large-v3
   language: en
 
 tts:

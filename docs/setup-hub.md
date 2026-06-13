@@ -83,7 +83,9 @@ runtime:
 
 stt:
   provider: whisper_local
-  model: base               # tiny / base / small
+  model: distil-large-v3    # tiny / base / small / medium / distil-large-v3 / large-v3
+                            # distil-large-v3 recommended: small models (tiny/base)
+                            # mishear accents and proper nouns
 
 tts:
   provider: piper_local

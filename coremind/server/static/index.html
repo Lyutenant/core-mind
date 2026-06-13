@@ -839,12 +839,13 @@
                 <label>Whisper Model</label>
                 <select id="stt.model">
                   <option value="tiny">tiny — fastest, ~75 MB</option>
-                  <option value="base">base — recommended, ~140 MB</option>
-                  <option value="small">small — accurate, ~460 MB</option>
-                  <option value="medium">medium — slow on CPU</option>
-                  <option value="large">large — very slow on CPU</option>
+                  <option value="base">base — fast, ~140 MB</option>
+                  <option value="small">small — balanced, ~460 MB</option>
+                  <option value="medium">medium — accurate, slower, ~1.5 GB</option>
+                  <option value="distil-large-v3">distil-large-v3 — recommended for English, ~1.5 GB</option>
+                  <option value="large-v3">large-v3 — most accurate, very slow on CPU, ~3 GB</option>
                 </select>
-                <span class="hint">Downloaded from HuggingFace on first use.</span>
+                <span class="hint">Downloaded from HuggingFace on first use. Larger models handle accents and proper nouns much better.</span>
               </div>
               <div class="field">
                 <label>Language</label>
@@ -1499,6 +1500,15 @@ function applyConfig(cfg) {
       el.value = '';
     } else {
       el.value = val;
+      // A select with a config value not in its option list would silently
+      // revert on save — surface the custom value as a real option instead.
+      if (el.tagName === 'SELECT' && el.value !== String(val)) {
+        const opt = document.createElement('option');
+        opt.value = String(val);
+        opt.textContent = `${val} (custom)`;
+        el.appendChild(opt);
+        el.value = String(val);
+      }
     }
   }
 
