@@ -47,3 +47,6 @@ logs/
 # Coding Agent files
 CLAUDE.md
 AGENT.md
+
+# User files
+reference/
