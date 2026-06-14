@@ -103,13 +103,15 @@ tts:
 ollama:
   base_url: http://localhost:11434
   model: gemma4:e4b          # ollama pull gemma4:e4b
+  # vision_model: llava:7b   # optional — enables the 'look' camera tool; ollama pull llava:7b
 
 tools:
   enabled: true
   built_in: [time, weather, aviation_weather, airport]
+  # add 'look' to let the assistant see through the Node's camera (needs vision_model above)
 ```
 
-See [Tools](tools.md) for MCP server config (music, ATC, etc.).
+See [Tools](tools.md) for MCP server config (music, ATC, etc.) and [Tools → Vision](tools.md#vision-look) for the camera setup.
 
 ### Improving recognition accuracy
 

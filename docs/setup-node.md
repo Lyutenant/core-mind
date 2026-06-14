@@ -68,6 +68,13 @@ sudo apt install mpv          # audio player (used by Node MCP)
 pip install 'coremind[tools]' # mcp SDK
 ```
 
+**Optional — camera / vision ("what do you see?"):**
+```bash
+pip install 'coremind[vision]'   # opencv for USB webcam capture
+coremind vision test -o frame.jpg   # plug in a USB webcam, confirm it captures
+```
+Then set `vision.enabled: true` in the Node config (step 5) and `ollama.vision_model` on the Hub. Full walkthrough: [Tools → Vision](tools.md#vision-look).
+
 ---
 
 ## 5. Create the Node config

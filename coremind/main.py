@@ -21,11 +21,13 @@ audio_app = typer.Typer(help="Audio device diagnostics and testing.")
 chat_app = typer.Typer(help="Voice interaction commands.")
 music_app = typer.Typer(help="Music library management.")
 atc_app = typer.Typer(help="ATC stream catalog management.")
+vision_app = typer.Typer(help="Camera / vision diagnostics.")
 
 app.add_typer(audio_app, name="audio")
 app.add_typer(chat_app, name="chat")
 app.add_typer(music_app, name="music")
 app.add_typer(atc_app, name="atc")
+app.add_typer(vision_app, name="vision")
 
 _settings = None
 _config_path: str = "config.yaml"
@@ -150,6 +152,93 @@ def audio_play_test(
     except AudioOutputError as e:
         console.print(f"[red]Playback failed:[/red] {e}")
         raise typer.Exit(code=1)
+
+
+# ---------------------------------------------------------------------------
+# Vision commands
+# ---------------------------------------------------------------------------
+
+@vision_app.command("test")
+def vision_test(
+    output: str = typer.Option("frame.jpg", "--output", "-o", help="Output JPEG file path."),
+    device: Optional[int] = typer.Option(None, "--device", "-d", help="Camera index (default: vision.camera_index)."),
+) -> None:
+    """Capture one frame from the camera and save it. Run this on the Node (Pi) to test the webcam."""
+    from coremind import VisionError
+    from coremind.vision.opencv_camera import OpenCVCamera
+
+    cfg = _get_settings().vision
+    idx = device if device is not None else cfg.camera_index
+
+    console.print(f"Capturing from camera [bold]{idx}[/bold] → [cyan]{output}[/cyan]")
+    try:
+        cam = OpenCVCamera(
+            camera_index=idx,
+            width=cfg.resolution_width,
+            height=cfg.resolution_height,
+        )
+        jpeg = cam.capture_jpeg()
+    except VisionError as e:
+        console.print(f"[red]Capture failed:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    Path(output).write_bytes(jpeg)
+    console.print(f"[green]Saved:[/green] {output}  ({len(jpeg)} bytes)")
+
+
+@vision_app.command("describe")
+def vision_describe(
+    image: str = typer.Option("", "--image", "-i", help="Image file to describe. If omitted, captures one from the camera."),
+    prompt: str = typer.Option("", "--prompt", "-p", help="What to look for. Defaults to a general description."),
+) -> None:
+    """Run the Hub vision model on an image (or a fresh capture). Run this on the Mac (Hub)."""
+    import base64
+
+    from coremind import BrainError, VisionError
+    from coremind.brain.ollama_client import OllamaClient
+
+    s = _get_settings()
+    if not s.ollama.vision_model:
+        console.print(
+            "[red]ollama.vision_model is not set.[/red] "
+            "Set it to e.g. 'llava:7b' in config.yaml, then run: ollama pull llava:7b"
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        if image:
+            jpeg = Path(image).read_bytes()
+        else:
+            from coremind.vision.opencv_camera import OpenCVCamera
+            console.print("[dim]No --image given — capturing from the local camera…[/dim]")
+            cam = OpenCVCamera(
+                camera_index=s.vision.camera_index,
+                width=s.vision.resolution_width,
+                height=s.vision.resolution_height,
+            )
+            jpeg = cam.capture_jpeg()
+    except VisionError as e:
+        console.print(f"[red]Capture failed:[/red] {e}")
+        raise typer.Exit(code=1)
+    except OSError as e:
+        console.print(f"[red]Could not read image:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    b64 = base64.b64encode(jpeg).decode("ascii")
+    question = prompt.strip() or "Describe what you see in this image in one or two concise sentences."
+    console.print(f"[dim]Asking {s.ollama.vision_model}…[/dim]")
+    client = OllamaClient(
+        base_url=s.ollama.base_url,
+        model=s.ollama.vision_model,
+        timeout=s.brain.timeout_seconds,
+    )
+    try:
+        description = client.describe_image(b64, question)
+    except BrainError as e:
+        console.print(f"[red]Vision model error:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(f"\n[bold cyan]Vision:[/bold cyan] {description}")
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +569,11 @@ def run() -> None:
                     atc_catalog_path=settings.node_mcp.atc_catalog_path,
                     port=settings.node_mcp.port,
                     host=settings.node_mcp.host,
+                    camera_enabled=settings.vision.enabled,
+                    camera_provider=settings.vision.provider,
+                    camera_index=settings.vision.camera_index,
+                    camera_width=settings.vision.resolution_width,
+                    camera_height=settings.vision.resolution_height,
                 )
             )
 

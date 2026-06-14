@@ -128,3 +128,15 @@ node_mcp:
   atc_catalog_path: ~/.coremind/atc-catalog.json # run 'coremind atc scan KEWR KJFK' to build
   # For airports with non-standard LiveATC mounts, add them manually:
   #   coremind atc add KIAD "Tower Runway 1C/19C" kiad1_twr_1c19c_120250 --freq 120.250
+
+# Camera (vision) — lets the assistant "look" via a USB webcam on this Pi.
+# When enabled, node_mcp exposes a capture_image tool; the Hub's `look` tool fetches a
+# frame from it and runs a local vision model (set ollama.vision_model on the Hub).
+# Requires on Pi:  pip install 'coremind[vision]'
+# Test the webcam:  coremind vision test -o frame.jpg
+vision:
+  enabled: false        # set true once a USB webcam is plugged in
+  provider: opencv      # opencv (USB webcam) or mock (for testing)
+  camera_index: 0       # 0 = first camera; try 1, 2… if you have several
+  resolution_width: 1280
+  resolution_height: 720

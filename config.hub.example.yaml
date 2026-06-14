@@ -72,6 +72,9 @@ ollama:
   model: qwen3:8b                    # pull first: ollama pull qwen3:8b
   no_think: true                     # skip chain-of-thought — faster voice responses
   options: {}                        # optional Ollama params: num_predict: 200, temperature: 0.7
+  # Vision model for the 'look' tool (camera on the Node). Local — images never leave the Mac.
+  # Pull first, e.g.:  ollama pull llava:7b   (or moondream for low RAM, llama3.2-vision for best quality)
+  # vision_model: llava:7b
 
 memory:
   enabled: true
@@ -87,6 +90,9 @@ tools:
   built_in: [time, weather, airport]
   # Full set including aviation tools:
   # built_in: [time, weather, aviation_weather, airport]
+  # Add 'look' to let the assistant see through the Node's camera ("what do you see?").
+  # Requires ollama.vision_model above and the Node's vision section enabled.
+  # built_in: [time, weather, airport, look]
   #
   # MCP servers — connect to any MCP-compatible server.
   # Requires: pip install 'coremind[tools]'

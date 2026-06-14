@@ -16,6 +16,14 @@ class Tool(ABC):
     @abstractmethod
     def run(self, **kwargs) -> str: ...
 
+    async def run_async(self, **kwargs) -> str:
+        """Async entry point. Defaults to the synchronous ``run``.
+
+        Tools that need to await I/O (e.g. fetching a frame from the Node over MCP)
+        override this instead of ``run``.
+        """
+        return self.run(**kwargs)
+
     def to_ollama_schema(self) -> dict:
         params = dict(self.parameters)
         if "type" not in params:

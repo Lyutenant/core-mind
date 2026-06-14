@@ -164,11 +164,21 @@ def _get_dispatcher():
         s = _get_settings()
         _dispatcher = ToolDispatcher()
         if s.tools.enabled and s.tools.built_in:
+            # The 'look' tool needs a vision-capable Ollama client (separate model).
+            vision_client = None
+            if s.ollama.vision_model:
+                from coremind.brain.ollama_client import OllamaClient
+                vision_client = OllamaClient(
+                    base_url=s.ollama.base_url,
+                    model=s.ollama.vision_model,
+                    timeout=s.brain.timeout_seconds,
+                )
             _dispatcher.register_built_ins(
                 s.tools.built_in,
                 default_timezone=s.app.user_timezone,
                 home_airport=s.app.home_airport,
                 taf_airport=s.app.taf_airport,
+                vision_client=vision_client,
             )
             logger.info("Tools loaded: %s", s.tools.built_in)
         # Re-attach the MCP manager if one is already running (survives config reloads).

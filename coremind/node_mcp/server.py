@@ -12,6 +12,11 @@ def create_node_mcp_server(
     atc_catalog_path: str = "~/.coremind/atc-catalog.json",
     host: str = "127.0.0.1",
     port: int = 8767,
+    camera_enabled: bool = False,
+    camera_provider: str = "opencv",
+    camera_index: int = 0,
+    camera_width: int = 1280,
+    camera_height: int = 720,
 ):
     """Build and return a FastMCP server exposing Node-local capabilities."""
     try:
@@ -135,6 +140,25 @@ def create_node_mcp_server(
         """Stop the currently streaming ATC audio."""
         return atc_player.stop_atc()
 
+    # --- Camera (vision) ---
+    # Only exposed when a camera is configured on this Node. The Hub's `look` tool
+    # fetches a frame from here and runs it through its local vision model.
+    if camera_enabled:
+        from coremind.node_mcp.tools import camera_capture
+        camera_capture.init_camera(
+            provider=camera_provider,
+            camera_index=camera_index,
+            width=camera_width,
+            height=camera_height,
+        )
+
+        @mcp.tool()
+        def capture_image() -> str:
+            """Capture a still image from the Node's camera. Returns a base64-encoded JPEG."""
+            return camera_capture.capture_image()
+
+        logger.info("Node camera enabled (provider=%s, index=%d)", camera_provider, camera_index)
+
     return mcp
 
 
@@ -144,8 +168,24 @@ async def run_node_mcp_server(
     atc_catalog_path: str = "~/.coremind/atc-catalog.json",
     port: int = 8767,
     host: str = "127.0.0.1",
+    camera_enabled: bool = False,
+    camera_provider: str = "opencv",
+    camera_index: int = 0,
+    camera_width: int = 1280,
+    camera_height: int = 720,
 ) -> None:
     """Start the Node MCP SSE server. Blocks until cancelled."""
-    mcp = create_node_mcp_server(music_dir, catalog_path, atc_catalog_path, host=host, port=port)
+    mcp = create_node_mcp_server(
+        music_dir,
+        catalog_path,
+        atc_catalog_path,
+        host=host,
+        port=port,
+        camera_enabled=camera_enabled,
+        camera_provider=camera_provider,
+        camera_index=camera_index,
+        camera_width=camera_width,
+        camera_height=camera_height,
+    )
     logger.info("Node MCP server listening on port %d", port)
     await mcp.run_sse_async()

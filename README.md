@@ -52,6 +52,8 @@ pip install 'coremind[wake_word]'           # onnxruntime inference backend
 pip install openwakeword --no-deps          # tflite has no Pi ARM64 wheel
 python -c "import openwakeword; openwakeword.utils.download_models()"
 
+pip install 'coremind[vision]'              # optional: USB webcam for "what do you see?" (see Tools → Vision)
+
 cp config.node.example.yaml config.yaml     # then edit Hub URL + audio devices
 coremind run
 ```
@@ -70,7 +72,7 @@ after first start.
 |-------|----------|
 | [Hub Setup](docs/setup-hub.md) | Full install, config, Caddy reverse proxy |
 | [Node Setup](docs/setup-node.md) | Full install, config, audio, Caddy, systemd |
-| [Tools](docs/tools.md) | Built-in tools, MCP servers, music player, ATC streaming |
+| [Tools](docs/tools.md) | Built-in tools, vision (camera), MCP servers, music player, ATC streaming |
 | [Troubleshooting](docs/troubleshooting.md) | `coremind doctor`, logs, updating |
 
 ---
@@ -94,6 +96,10 @@ coremind audio play-test -f test.wav
 coremind run                            # full mode: wake word + VAD + remote brain
 coremind chat loop                      # push-to-talk loop (no wake word)
 coremind chat once                      # single push-to-talk turn
+
+# Camera / vision
+coremind vision test -o frame.jpg       # (Node) capture a webcam frame to confirm the camera works
+coremind vision describe --image frame.jpg  # (Hub) run the vision model on an image
 
 # Music library (Node)
 coremind music scan                     # scan music_dir and rebuild catalog
@@ -133,9 +139,10 @@ coremind/
   memory/         Session memory
   wake_word/      Wake-word detection (openwakeword/onnx, dummy)
   vad/            Voice activity detection (energy-based)
+  vision/         Camera capture on the Node (USB webcam, mock)
   server/         CoreMind Hub — FastAPI + web dashboard
-  tools/          Dispatcher, built-in tools, Hub MCP client
-  node_mcp/       Node MCP server — 17 tools (music + ATC)
+  tools/          Dispatcher, built-in tools (incl. vision 'look'), Hub MCP client
+  node_mcp/       Node MCP server — music + ATC + optional camera (capture_image)
   airports.py     Bundled ICAO database (19K airports, offline)
 ```
 
@@ -150,6 +157,7 @@ Implemented and working (v0.4.7):
 - Configurable assistant personality (free-text persona/tone, with presets)
 - Session memory + follow-up listening window with safety mechanisms
 - Built-in tools (time, weather, aviation weather, airport) + offline 19K-airport ICAO database
+- Vision on demand — a USB webcam on the Pi lets the assistant "look" ("what do you see?"); a local Ollama vision model on the Mac describes the scene (opt-in, images stay local)
 - Hub MCP client (stdio + HTTP/SSE, auto-reconnect) and Node MCP server (13 music + 4 ATC tools)
 - Music catalog from folder structure; LiveATC streaming with scored channel matching and frequency pinning
 - Node auto-registration with heartbeat; `coremind doctor` diagnostics; systemd user service on the Pi
@@ -162,3 +170,4 @@ Implemented and working (v0.4.7):
 - **Long-term memory** — deferred until the voice loop is fully reliable; no vector DB yet
 - **More MCP integrations** — home automation, calendars, etc. (all via MCP, not bespoke code)
 - **Audio refinements** — Bluetooth speakers, ReSpeaker XVF3800 echo cancellation / DoA
+- **Perception → autonomy** — let the world *trigger* the assistant (motion/timer-driven "look"), building on vision on demand

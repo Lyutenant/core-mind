@@ -86,6 +86,7 @@ class BrainConfig(BaseModel):
 class OllamaConfig(BaseModel):
     base_url: str = "http://localhost:11434"
     model: str = "qwen3:8b"
+    vision_model: Optional[str] = None   # multimodal model for the 'look' tool, e.g. "llava:7b"; None disables vision
     no_think: bool = False
     options: dict = {}
 
@@ -146,6 +147,27 @@ class NodeMCPConfig(BaseModel):
     atc_catalog_path: str = "~/.coremind/atc-catalog.json"
 
 
+class VisionConfig(BaseModel):
+    """Camera capture on the Node (Pi). Inference runs on the Hub via ollama.vision_model.
+
+    When enabled, the Node MCP server exposes a `capture_image` tool that the Hub's
+    `look` tool fetches a frame from. The Pi does the cheap I/O (grab a frame); the
+    Mac runs the heavy vision model.
+    """
+    enabled: bool = False
+    provider: str = "opencv"            # "opencv" (USB webcam via opencv-python) or "mock"
+    camera_index: int = 0              # 0 = first camera; 1+ for additional USB cameras
+    resolution_width: int = 1280
+    resolution_height: int = 720
+
+    @field_validator("camera_index")
+    @classmethod
+    def validate_camera_index(cls, v: int) -> int:
+        if v < 0:
+            raise ValueError("camera_index must be >= 0")
+        return v
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix=_ENV_PREFIX,
@@ -173,6 +195,7 @@ class Settings(BaseSettings):
     remote_brain: RemoteBrainConfig = RemoteBrainConfig()
     tools: ToolsConfig = ToolsConfig()
     node_mcp: NodeMCPConfig = NodeMCPConfig()
+    vision: VisionConfig = VisionConfig()
 
 
 def _coerce(val: str) -> object:
