@@ -248,12 +248,15 @@ class VoiceLoop:
         if self._wake_word is not None:
             self._status(self._wake_word.trigger_prompt)
             self._wake_word.listen_until_wake_word()
-            self._play_wake_chime()
             self._wake_fn()
 
-        # Pause music playback for clean recording (no-op if nothing is playing)
+        # Stop any playback first so the chime and recording own the speaker/mic
+        # (the USB speaker allows only one open at a time). The chime plays after
+        # this so it isn't fighting an active stream for the output device.
         self._on_listening_start()
         try:
+            if self._wake_word is not None:
+                self._play_wake_chime()
             # Step 2: record — VAD stops at natural pause, fixed-duration otherwise
             if self._vad is not None:
                 self._status("Speak now...")

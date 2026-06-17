@@ -60,12 +60,12 @@ def stop_playback() -> str:
 
 
 def pause_mpv() -> None:
-    """Suspend audio with SIGSTOP for mic isolation during voice turns."""
+    """Free the speaker/mic for a voice turn by stopping playback."""
     playback.pause()
 
 
 def resume_mpv() -> None:
-    """Resume audio with SIGCONT after voice turn ends."""
+    """Relaunch the playback that was stopped for the voice turn."""
     playback.resume()
 
 
