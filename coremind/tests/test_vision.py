@@ -26,14 +26,29 @@ def test_mock_camera_returns_jpeg_bytes():
 # OpenCVCamera (with a faked cv2 module — no real webcam needed)
 # ---------------------------------------------------------------------------
 
-def _install_fake_cv2(monkeypatch, *, opened=True, frame=None):
-    """Install a minimal fake `cv2` module into sys.modules and return it."""
-    if frame is None:
-        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+def _bright_frame():
+    # Mid-gray frame: mean brightness well above the dark threshold.
+    return np.full((720, 1280, 3), 128, dtype=np.uint8)
+
+
+def _dark_frame():
+    return np.zeros((720, 1280, 3), dtype=np.uint8)
+
+
+def _install_fake_cv2(monkeypatch, *, opened=True, frame=None, frames=None):
+    """Install a minimal fake `cv2` module into sys.modules and return it.
+
+    Pass `frames` (a list) to simulate a warm-up sequence; each read() returns
+    the next frame and repeats the last one once exhausted.
+    """
+    if frame is None and frames is None:
+        frame = _bright_frame()
+    seq = list(frames) if frames is not None else None
 
     class _Cap:
         def __init__(self, index):
             self.index = index
+            self._i = 0
 
         def isOpened(self):
             return opened
@@ -42,6 +57,10 @@ def _install_fake_cv2(monkeypatch, *, opened=True, frame=None):
             return True
 
         def read(self):
+            if seq is not None:
+                f = seq[min(self._i, len(seq) - 1)]
+                self._i += 1
+                return (True, f)
             return (True, frame)
 
         def release(self):
@@ -64,6 +83,33 @@ def test_opencv_camera_captures_and_encodes(monkeypatch):
     from coremind.vision.opencv_camera import OpenCVCamera
 
     cam = OpenCVCamera(camera_index=0, width=1280, height=720)
+    jpeg = cam.capture_jpeg()
+    assert jpeg[:2] == b"\xff\xd8"
+
+
+def test_opencv_camera_skips_dark_warmup_frames(monkeypatch):
+    # First frames are black (sensor warming up), then a real frame arrives.
+    _install_fake_cv2(monkeypatch, frames=[_dark_frame(), _dark_frame(), _bright_frame()])
+    from coremind.vision.opencv_camera import OpenCVCamera
+
+    cam = OpenCVCamera(camera_index=0)
+    captured = {}
+
+    def _capture(f):
+        captured["frame"] = f
+        return f
+
+    cam._downscale = _capture
+    cam.capture_jpeg()
+    assert float(captured["frame"].mean()) >= cam.dark_threshold  # skipped the black frames
+
+
+def test_opencv_camera_returns_last_frame_when_all_dark(monkeypatch):
+    # A genuinely dark room: never brightens — return the last frame after warmup.
+    _install_fake_cv2(monkeypatch, frame=_dark_frame())
+    from coremind.vision.opencv_camera import OpenCVCamera
+
+    cam = OpenCVCamera(camera_index=0, warmup_seconds=0.05)
     jpeg = cam.capture_jpeg()
     assert jpeg[:2] == b"\xff\xd8"
 
