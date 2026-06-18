@@ -44,9 +44,10 @@ logs/
 # Environment variables
 .env
 
-# Coding Agent files
+# Coding Agent files (private, never published to GitHub)
 CLAUDE.md
 AGENT.md
+.ai-notes/
 
 # User files
 reference/
