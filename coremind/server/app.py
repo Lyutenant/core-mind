@@ -475,6 +475,22 @@ try:
             logger.error("Tool invoke error for %r: %s", name, e)
             return JSONResponse(status_code=500, content={"error": str(e)})
 
+    @app.post("/api/tools/refresh")
+    async def refresh_tools():
+        """Force an immediate re-sync of every connected MCP server's tool list.
+
+        Lets a capability just enabled on a Node (e.g. the camera's `capture_image`)
+        show up without waiting for the periodic re-sync or restarting the Hub.
+        """
+        if _mcp_manager is None:
+            return JSONResponse(
+                status_code=409,
+                content={"error": "No MCP servers configured — nothing to refresh."},
+            )
+        refreshed = await _mcp_manager.refresh()
+        logger.info("Manual MCP tool refresh: %s", refreshed)
+        return {"refreshed": refreshed}
+
     # -----------------------------------------------------------------------
     # Conversation history
     # -----------------------------------------------------------------------

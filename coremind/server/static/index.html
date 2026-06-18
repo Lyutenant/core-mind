@@ -1189,7 +1189,10 @@
           <div class="tools-sidebar">
             <div class="tools-sidebar-hdr">
               <span class="tools-count-label" id="tools-count-label">Tools</span>
-              <button class="btn" style="padding:3px 8px;font-size:11px" onclick="loadTools()">↻</button>
+              <span style="display:flex;gap:6px">
+                <button class="btn" style="padding:3px 8px;font-size:11px" title="Re-fetch tool list from MCP servers (picks up newly enabled Node capabilities)" id="tools-sync-btn" onclick="syncMcpTools()">Sync MCP</button>
+                <button class="btn" style="padding:3px 8px;font-size:11px" title="Reload this view" onclick="loadTools()">↻</button>
+              </span>
             </div>
             <div class="tools-list-items" id="tools-list-items">
               <div class="nodes-empty" style="padding:30px 12px">Loading…</div>
@@ -1849,6 +1852,34 @@ async function loadTools() {
   } catch (e) {
     document.getElementById('tools-list-items').innerHTML =
       `<div class="nodes-empty">Failed to load tools</div>`;
+  }
+}
+
+async function syncMcpTools() {
+  const btn = document.getElementById('tools-sync-btn');
+  const label = document.getElementById('tools-count-label');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  try {
+    const resp = await fetch('/api/tools/refresh', { method: 'POST' });
+    const data = await resp.json();
+    if (!resp.ok) {
+      label.textContent = data.error || 'Refresh failed';
+    } else {
+      // loadTools() repaints the list and the accurate tool count (the real
+      // success signal); only flag servers whose re-sync failed.
+      await loadTools();
+      const failed = Object.entries(data.refreshed || {})
+        .filter(([, n]) => n === null)
+        .map(([name]) => name);
+      if (failed.length) label.textContent += ` — sync failed: ${failed.join(', ')}`;
+    }
+  } catch (e) {
+    label.textContent = 'Refresh failed';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
   }
 }
 
