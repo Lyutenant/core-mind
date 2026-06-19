@@ -81,6 +81,14 @@ The `look` tool gives the assistant eyes: a **USB webcam on the Node (Pi)** capt
 
 Then ask **"what do you see?"** by voice or in the dashboard chat.
 
+**Dashboard snapshot**
+
+The dashboard's **Camera** card (right-hand panel of the main view) captures a still from the Node webcam and shows it in the browser — handy for aiming the camera or a quick glance without speaking. Click **Capture snapshot** to grab a frame; click **Describe this** to run the Hub vision model on that exact frame.
+
+- A raw snapshot needs only the Node's `vision.enabled` — `ollama.vision_model` is **not** required (only **Describe** uses the model).
+- Endpoints: `POST /api/vision/capture` → `{image: <data-url>, captured_at}`; `POST /api/vision/describe` (body `{image}`) → `{description}`. These are dedicated routes — `capture_image` stays blocked from `/api/tools/invoke`.
+- Same privacy posture as `look`: the frame is held in memory and streamed to the browser, never written to disk; logs record metadata only.
+
 **Privacy & notes**
 
 - Images are held in memory only and never written to disk (except `coremind vision test`, which you explicitly ask for). Logs record metadata, not images.

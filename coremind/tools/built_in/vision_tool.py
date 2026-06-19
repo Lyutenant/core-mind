@@ -11,7 +11,7 @@ from coremind.tools.registry import Tool
 logger = logging.getLogger(__name__)
 
 
-def _looks_like_jpeg_base64(s: str) -> bool:
+def looks_like_jpeg_base64(s: str) -> bool:
     """Cheap sanity check that a tool result is a base64 image and not an error string."""
     if not s or s.startswith(ERROR_PREFIX) or len(s) < 64:
         return False
@@ -64,7 +64,7 @@ class LookAtSceneTool(Tool):
 
     async def run_async(self, prompt: str = "", **kwargs) -> str:
         frame_b64 = await self._dispatcher.execute_async("capture_image", {})
-        if not _looks_like_jpeg_base64(frame_b64):
+        if not looks_like_jpeg_base64(frame_b64):
             logger.warning("look: no usable frame from Node — %s", frame_b64[:120])
             return (
                 "I couldn't get an image from the camera. Make sure the Node is online "

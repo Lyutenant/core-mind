@@ -755,6 +755,20 @@
           </div>
         </div>
         <div class="stat-section">
+          <div class="stat-title">Camera</div>
+          <button class="btn primary" id="camera-capture-btn" onclick="captureSnapshot()" style="width:100%;justify-content:center">
+            📷 Capture snapshot
+          </button>
+          <div id="camera-meta" class="stat-key" style="margin-top:6px;font-size:11px;"></div>
+          <img id="camera-img" alt="camera snapshot"
+               style="display:none;width:100%;border-radius:var(--radius);margin-top:8px;border:1px solid var(--border);" />
+          <button class="btn" id="camera-describe-btn" onclick="describeSnapshot()"
+                  style="display:none;width:100%;justify-content:center;margin-top:8px">
+            Describe this
+          </button>
+          <pre class="tool-result" id="camera-desc" style="margin-top:8px;"></pre>
+        </div>
+        <div class="stat-section">
           <div class="stat-title">Actions</div>
           <button class="btn danger" onclick="clearConversation()" style="width:100%;justify-content:center">
             🗑 Clear Log
@@ -2016,6 +2030,70 @@ async function invokeTool() {
     resultEl.className = 'tool-result err';
     resultEl.textContent = String(e);
     if (statusEl) statusEl.textContent = '✗ Failed';
+  }
+}
+
+// ── Camera snapshot ──────────────────────────────────────────────────────────
+async function captureSnapshot() {
+  const btn = document.getElementById('camera-capture-btn');
+  const img = document.getElementById('camera-img');
+  const meta = document.getElementById('camera-meta');
+  const descBtn = document.getElementById('camera-describe-btn');
+  const desc = document.getElementById('camera-desc');
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = 'Capturing…';
+  desc.style.display = 'none';
+  desc.className = 'tool-result';
+  try {
+    const r = await fetch('/api/vision/capture', { method: 'POST' });
+    const data = await r.json();
+    if (r.ok) {
+      img.src = data.image;                 // data: URL — set directly, not via esc()
+      img.style.display = 'block';
+      descBtn.style.display = 'inline-flex';
+      meta.textContent = 'captured ' + new Date(data.captured_at).toLocaleTimeString();
+    } else {
+      toast(data.error || ('Capture failed (' + r.status + ')'), 'error');
+    }
+  } catch (e) {
+    toast('Capture failed: ' + e, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+async function describeSnapshot() {
+  const img = document.getElementById('camera-img');
+  const btn = document.getElementById('camera-describe-btn');
+  const desc = document.getElementById('camera-desc');
+  if (!img.src) return;
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = 'Describing…';
+  try {
+    const r = await fetch('/api/vision/describe', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image: img.src}),
+    });
+    const data = await r.json();
+    desc.style.display = 'block';
+    if (r.ok) {
+      desc.className = 'tool-result ok';
+      desc.textContent = data.description;
+    } else {
+      desc.className = 'tool-result err';
+      desc.textContent = data.error || ('Describe failed (' + r.status + ')');
+    }
+  } catch (e) {
+    desc.style.display = 'block';
+    desc.className = 'tool-result err';
+    desc.textContent = String(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 }
 

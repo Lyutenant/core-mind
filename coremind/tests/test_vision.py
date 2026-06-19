@@ -289,3 +289,74 @@ def test_capture_image_hidden_even_without_look():
     names = [s["function"]["name"] for s in d.get_tool_definitions()]
     assert "capture_image" not in names
     assert "set_volume" in names
+
+
+# ---------------------------------------------------------------------------
+# Hub dashboard snapshot endpoints (/api/vision/capture, /api/vision/describe)
+# Skipped where FastAPI isn't installed (server deps live on the Mac Mini Hub).
+# ---------------------------------------------------------------------------
+
+def _vision_test_client(monkeypatch, *, frame, has_camera=True, vision_model="llava:7b"):
+    """Build a TestClient with the capture/vision plumbing stubbed out."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from coremind.server import app as app_module
+
+    monkeypatch.setattr(app_module, "_get_dispatcher", lambda: _FakeDispatcher(frame))
+    monkeypatch.setattr(
+        app_module, "_mcp_manager",
+        types.SimpleNamespace(tool_to_server={"capture_image": "node"} if has_camera else {}),
+    )
+    settings = types.SimpleNamespace(
+        ollama=types.SimpleNamespace(base_url="http://x", vision_model=vision_model),
+        brain=types.SimpleNamespace(timeout_seconds=30),
+    )
+    monkeypatch.setattr(app_module, "_get_settings", lambda: settings)
+    return TestClient(app_module.app)
+
+
+def test_capture_endpoint_returns_data_url(monkeypatch):
+    client = _vision_test_client(monkeypatch, frame=_valid_frame_b64())
+    resp = client.post("/api/vision/capture")
+    assert resp.status_code == 200
+    assert resp.json()["image"].startswith("data:image/jpeg;base64,")
+
+
+def test_capture_endpoint_409_when_camera_unavailable(monkeypatch):
+    client = _vision_test_client(monkeypatch, frame=_valid_frame_b64(), has_camera=False)
+    resp = client.post("/api/vision/capture")
+    assert resp.status_code == 409
+
+
+def test_capture_endpoint_502_on_camera_error(monkeypatch):
+    client = _vision_test_client(monkeypatch, frame="CAMERA_ERROR: no device")
+    resp = client.post("/api/vision/capture")
+    assert resp.status_code == 502
+    assert "no device" in resp.json()["error"]
+
+
+def test_describe_endpoint_409_without_vision_model(monkeypatch):
+    client = _vision_test_client(monkeypatch, frame=_valid_frame_b64(), vision_model=None)
+    resp = client.post("/api/vision/describe", json={"image": _valid_frame_b64()})
+    assert resp.status_code == 409
+
+
+def test_describe_endpoint_describes_frame(monkeypatch):
+    client = _vision_test_client(monkeypatch, frame=_valid_frame_b64())
+    from coremind.brain import ollama_client
+
+    class _StubClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def describe_image(self, image_b64, prompt):
+            return "a tidy desk"
+
+    monkeypatch.setattr(ollama_client, "OllamaClient", _StubClient)
+    resp = client.post(
+        "/api/vision/describe",
+        json={"image": "data:image/jpeg;base64," + _valid_frame_b64()},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["description"] == "a tidy desk"
