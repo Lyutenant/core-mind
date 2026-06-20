@@ -108,6 +108,9 @@ class VoiceLoop:
         self._on_listening_start: Callable[[], None] = on_listening_start or (lambda: None)
         self._on_turn_complete: Callable[[], None] = on_turn_complete or (lambda: None)
         self._session_id = str(uuid.uuid4())
+        # Last wake-VAD override value we processed from the Hub. Dedups repeated polls
+        # so a value the Hub re-sends every 30 s isn't re-applied (and re-warned) endlessly.
+        self._last_vad_request: float | None = None
         # ISO timestamp of the config file at startup — sent to Hub on registration
         # so both sides can agree on which config is newer.
         from datetime import datetime, timezone
@@ -171,9 +174,46 @@ class VoiceLoop:
         try:
             r = httpx.get(f"{base}/v1/nodes/{node_id}/config", timeout=5.0)
             if r.status_code == 200:
-                self._apply_node_config(r.json())
+                cfg = r.json()
+                corrections = self._apply_node_config(cfg)
+                self._hub_report_corrections(httpx, base, node_id, cfg, corrections)
         except Exception as e:
             logger.debug("Config poll failed: %s", e)
+
+    def _hub_report_corrections(
+        self, httpx, base: str, node_id: str, base_cfg: dict, corrections: dict
+    ) -> None:
+        """Push the Node's real state back to the Hub for overrides it couldn't apply.
+
+        Posts the full override set with the corrected values merged in (set_node_config
+        replaces overrides wholesale, so we must preserve the other keys). This clears the
+        phantom value on the Hub, updates the Nodes panel, and stops the Hub from re-sending
+        the unapplicable value every poll.
+        """
+        if not corrections:
+            return
+        merged = {**(base_cfg or {}), **corrections}
+        try:
+            # The Hub's config endpoint is registered PUT-only (same as the dashboard uses).
+            r = httpx.put(f"{base}/v1/nodes/{node_id}/config", json=merged, timeout=5.0)
+            if r.status_code == 200:
+                logger.info(
+                    "Reported corrected config to Hub (could not apply: %s)",
+                    list(corrections.keys()),
+                )
+                # Mark reconciled so we don't reprocess the now-corrected value next poll.
+                if "wake_word_vad_threshold" in corrections:
+                    self._last_vad_request = float(corrections["wake_word_vad_threshold"])
+            else:
+                # Hub rejected the correction — don't claim success; retry next poll.
+                logger.warning(
+                    "Hub rejected config correction (HTTP %s); will retry", r.status_code
+                )
+                self._last_vad_request = None
+        except Exception as e:
+            # Couldn't reach the Hub to correct it — retry on the next poll.
+            logger.debug("Failed to report config corrections to Hub: %s", e)
+            self._last_vad_request = None
 
     def _build_config_snapshot(self) -> dict:
         """Current values of all Hub-overrideable settings, sent on registration."""
@@ -187,6 +227,8 @@ class VoiceLoop:
         }
         if self._wake_word is not None and hasattr(self._wake_word, "_threshold"):
             snap["wake_word_threshold"] = self._wake_word._threshold
+        if self._wake_word is not None and hasattr(self._wake_word, "_vad_threshold"):
+            snap["wake_word_vad_threshold"] = self._wake_word._vad_threshold
         if self._vad is not None and hasattr(self._vad, "threshold"):
             snap["vad_energy_threshold"] = self._vad.threshold
         return snap
@@ -207,20 +249,42 @@ class VoiceLoop:
             if r.status_code == 200:
                 data = r.json()
                 if "config" in data:
-                    self._apply_node_config(data["config"])
+                    corrections = self._apply_node_config(data["config"])
+                    self._hub_report_corrections(
+                        httpx, base, node_id, data["config"], corrections
+                    )
                 logger.info("Registered with Hub as Node %s (%s)", name, node_id[:8])
             else:
                 logger.warning("Hub registration returned HTTP %s", r.status_code)
         except Exception as e:
             logger.warning("Hub registration failed (will retry on next heartbeat): %s", e)
 
-    def _apply_node_config(self, cfg: dict) -> None:
-        """Hot-reload soft settings received from Hub without restarting."""
+    def _apply_node_config(self, cfg: dict) -> dict:
+        """Hot-reload soft settings received from Hub without restarting.
+
+        Returns a dict of corrections for any override the Node could not honor
+        (e.g. a VAD gate this openwakeword build can't support), so the caller can
+        report the real state back to the Hub instead of leaving a phantom value.
+        """
+        corrections: dict = {}
         if not cfg:
-            return
+            return corrections
         if "wake_word_threshold" in cfg and self._wake_word is not None:
             if hasattr(self._wake_word, "_threshold"):
                 self._wake_word._threshold = float(cfg["wake_word_threshold"])
+        if "wake_word_vad_threshold" in cfg and self._wake_word is not None:
+            # set_vad_threshold loads Silero on demand, so a gate enabled from the Hub
+            # (on a node that started at the default 0.0) takes effect without a restart.
+            setter = getattr(self._wake_word, "set_vad_threshold", None)
+            requested = float(cfg["wake_word_vad_threshold"])
+            # Dedup: skip a value the Hub keeps re-sending so we don't re-warn each poll.
+            if callable(setter) and requested != self._last_vad_request:
+                self._last_vad_request = requested
+                if not setter(requested) and requested > 0.0:
+                    # The gate couldn't be enabled (unsupported build or Silero load
+                    # failure) — tell the Hub it's actually off so the panel/state and
+                    # future polls reflect reality instead of a phantom-active gate.
+                    corrections["wake_word_vad_threshold"] = 0.0
         if "vad_energy_threshold" in cfg and self._vad is not None:
             if hasattr(self._vad, "threshold"):
                 self._vad.threshold = float(cfg["vad_energy_threshold"])
@@ -237,6 +301,7 @@ class VoiceLoop:
         if "post_response_cooldown_seconds" in cfg:
             self._post_response_cooldown = float(cfg["post_response_cooldown_seconds"])
         logger.debug("Applied node config overrides: %s", list(cfg.keys()))
+        return corrections
 
     def run_once(self) -> tuple[str, str]:
         """[Wake word] → record → [remote or local] transcribe/LLM/TTS → [speak].

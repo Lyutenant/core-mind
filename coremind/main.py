@@ -306,9 +306,11 @@ def _build_voice_loop(
                     device=acfg.input_device,
                     sample_rate=16000,  # openwakeword always requires 16 kHz
                     inference_framework=wwcfg.inference_framework,
+                    vad_threshold=wwcfg.vad_threshold,
                 )
                 console.print(
-                    f"[dim]Wake word: {wwcfg.model} (threshold={wwcfg.threshold})[/dim]"
+                    f"[dim]Wake word: {wwcfg.model} "
+                    f"(threshold={wwcfg.threshold}, vad_gate={wwcfg.vad_threshold})[/dim]"
                 )
             except WakeWordError as e:
                 console.print(

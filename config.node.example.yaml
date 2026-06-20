@@ -56,6 +56,12 @@ wake_word:
   model: hey_jarvis_v0.1
   # Confidence threshold (0.0–1.0). Higher = fewer false positives, but may miss triggers.
   threshold: 0.5
+  # Silero VAD pre-gate (0.0–1.0). 0 = off. Suppresses wake predictions on non-speech
+  # frames — the recommended first lever for noise false-wakes, since it cuts false
+  # triggers WITHOUT making the wake phrase harder to detect. Try ~0.5; tune live from the
+  # Hub Nodes panel ("Wake VAD Gate") — Silero loads on demand, no restart needed.
+  # Needs openwakeword's Silero VAD support.
+  vad_threshold: 0.0
   # Use onnx on Pi — tflite is incompatible with NumPy 2.x on Raspberry Pi OS.
   inference_framework: onnx
 

@@ -132,6 +132,7 @@ wake_word:
   provider: dummy
   model: hey_jarvis_v0.1
   threshold: 0.5
+  vad_threshold: 0.0  # Silero VAD pre-gate (0=off); reduces noise false-wakes without raising threshold
   inference_framework: onnx
 
 openclaw:

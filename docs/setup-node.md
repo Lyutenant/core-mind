@@ -108,6 +108,7 @@ wake_word:
   provider: openwakeword
   model: hey_jarvis_v0.1
   threshold: 0.5
+  vad_threshold: 0.0  # Silero speech pre-gate (0=off); raise (~0.5) if noise false-triggers the wake
   inference_framework: onnx
 
 vad:
