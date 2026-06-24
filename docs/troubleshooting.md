@@ -129,6 +129,19 @@ The camera lives on the **Node (Pi)**; the vision model runs on the **Hub (Mac)*
 
 ---
 
+## Random noise triggers the wake word
+
+Don't just raise `threshold` — that also makes the real wake phrase harder to detect. Reach
+for the **Wake VAD Gate** first:
+
+- Raise **Wake VAD Gate** from 0 in the Nodes panel (try ~0.5). This is openWakeWord's Silero
+  speech pre-gate: it suppresses wake predictions on frames with no speech, so pure room noise
+  stops firing the wake — while the spoken phrase still triggers at the same `threshold`. Silero
+  loads on demand the first time you enable the gate, so this works live, no Node restart needed.
+- If false-wakes persist at a high gate, nudge `threshold` up a little as a secondary step.
+
+---
+
 ## Updating
 
 ```bash

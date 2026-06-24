@@ -727,7 +727,8 @@ try:
         data = await request.json()
         # Only accept known tunable keys
         allowed = {
-            "wake_word_threshold", "vad_energy_threshold", "vad_silence_seconds",
+            "wake_word_threshold", "wake_word_vad_threshold",
+            "vad_energy_threshold", "vad_silence_seconds",
             "vad_max_record_seconds", "vad_min_speech_seconds",
             "follow_up_seconds", "follow_up_min_words", "post_response_cooldown_seconds",
         }

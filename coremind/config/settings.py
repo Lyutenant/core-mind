@@ -110,6 +110,8 @@ class WakeWordConfig(BaseModel):
     model: str = "hey_jarvis_v0.1"  # built-in name or path to .onnx
     threshold: float = 0.5
     inference_framework: str = "onnx"  # "onnx" (Pi-compatible) or "tflite"
+    vad_threshold: float = 0.0  # Silero VAD pre-gate (0.0 = off). Suppresses wake
+    # predictions on non-speech frames; reduces noise false-fires without raising threshold.
 
 
 class MemoryConfig(BaseModel):

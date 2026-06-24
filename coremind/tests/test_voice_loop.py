@@ -207,7 +207,7 @@ def test_hub_sync_tick_reregisters_on_404(mocker):
 def test_hub_sync_tick_polls_config_when_heartbeat_ok(mocker):
     loop = _make_sync_loop(mocker)
     register = mocker.patch.object(loop, "_hub_register")
-    apply_config = mocker.patch.object(loop, "_apply_node_config")
+    apply_config = mocker.patch.object(loop, "_apply_node_config", return_value={})
 
     fake_httpx = mocker.Mock()
     fake_httpx.post.return_value = mocker.Mock(status_code=200)
@@ -232,3 +232,128 @@ def test_hub_sync_tick_survives_hub_unreachable(mocker):
     loop._hub_sync_tick(fake_httpx, "http://hub:8765", "abc123", "Bot", "pi")
 
     register.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Wake VAD gate hot-reload
+# ---------------------------------------------------------------------------
+
+class _FakeWakeWord:
+    """Stand-in mirroring OpenWakeWordDetector's hot-reload interface."""
+
+    def __init__(self, vad_loaded=False, vad_supported=True):
+        self._threshold = 0.5
+        self._vad_threshold = 0.0
+        self._vad_loaded = vad_loaded
+        self._vad_supported = vad_supported
+
+        class _OWW:
+            vad_threshold = 0.0
+
+        self._oww = _OWW()
+
+    def set_vad_threshold(self, value):
+        value = max(0.0, float(value))
+        if value > 0.0 and not self._vad_supported:
+            self._vad_threshold = 0.0
+            return False  # build can't gate
+        if value > 0.0:
+            self._vad_loaded = True  # lazy-load on demand
+        self._vad_threshold = value
+        self._oww.vad_threshold = value
+        return True
+
+
+def test_wake_vad_threshold_hot_reload_enables_from_off(mocker):
+    # Node started at the default 0.0 (gate off). A Hub override must enable it via
+    # set_vad_threshold (Silero loaded on demand) and round-trip through the snapshot.
+    loop = _make_loop(mocker)
+    loop._wake_word = _FakeWakeWord(vad_loaded=False)
+
+    loop._apply_node_config({"wake_word_vad_threshold": 0.4})
+
+    assert loop._wake_word._vad_loaded is True
+    assert loop._wake_word._vad_threshold == 0.4
+    assert loop._wake_word._oww.vad_threshold == 0.4
+
+    snap = loop._build_config_snapshot()
+    assert snap["wake_word_vad_threshold"] == 0.4
+
+
+def test_wake_vad_threshold_hot_reload_can_disable(mocker):
+    loop = _make_loop(mocker)
+    loop._wake_word = _FakeWakeWord(vad_loaded=True)
+    loop._wake_word._vad_threshold = 0.5
+    loop._wake_word._oww.vad_threshold = 0.5
+
+    loop._apply_node_config({"wake_word_vad_threshold": 0.0})
+
+    assert loop._wake_word._vad_threshold == 0.0
+    assert loop._wake_word._oww.vad_threshold == 0.0
+
+
+def test_apply_node_config_corrects_unsupported_vad(mocker):
+    # On a build that can't gate, a nonzero override is refused locally AND a correction
+    # (gate → 0) is returned so the caller can clear the phantom value on the Hub.
+    loop = _make_loop(mocker)
+    loop._wake_word = _FakeWakeWord(vad_supported=False)
+
+    corrections = loop._apply_node_config({"wake_word_vad_threshold": 0.4})
+    assert corrections == {"wake_word_vad_threshold": 0.0}
+    assert loop._wake_word._vad_threshold == 0.0
+
+    # Dedup: the same value re-sent by the Hub is not reprocessed (no repeated warning).
+    assert loop._apply_node_config({"wake_word_vad_threshold": 0.4}) == {}
+
+
+def test_hub_sync_tick_reports_vad_correction_to_hub(mocker):
+    # End-to-end: poll returns a nonzero VAD override the node can't honor → the node
+    # posts the full override set back with the gate zeroed (other keys preserved).
+    loop = _make_sync_loop(mocker)
+    loop._wake_word = _FakeWakeWord(vad_supported=False)
+    mocker.patch.object(loop, "_hub_register")
+
+    fake_httpx = mocker.Mock()
+    fake_httpx.post.return_value = mocker.Mock(status_code=200)  # heartbeat
+    fake_httpx.put.return_value = mocker.Mock(status_code=200)   # correction
+    fake_httpx.get.return_value = mocker.Mock(
+        status_code=200,
+        json=lambda: {"wake_word_vad_threshold": 0.4, "follow_up_seconds": 5.0},
+    )
+
+    loop._hub_sync_tick(fake_httpx, "http://hub:8765", "abc123", "Bot", "pi")
+
+    # The correction must go out via PUT (the Hub's registered method) to the config route,
+    # with the merged, zeroed override.
+    correction_calls = [
+        c for c in fake_httpx.put.call_args_list
+        if c.args and c.args[0].endswith("/v1/nodes/abc123/config")
+    ]
+    assert len(correction_calls) == 1
+    sent = correction_calls[0].kwargs["json"]
+    assert sent["wake_word_vad_threshold"] == 0.0   # gate cleared
+    assert sent["follow_up_seconds"] == 5.0          # other overrides preserved
+    # POST is only the heartbeat — never the config route.
+    assert not any(
+        c.args and c.args[0].endswith("/v1/nodes/abc123/config")
+        for c in fake_httpx.post.call_args_list
+    )
+
+
+def test_hub_sync_tick_correction_retries_on_non_200(mocker):
+    # If the Hub rejects the correction, the node must NOT mark it reconciled — it resets
+    # so the next poll retries instead of deduping the still-stale value.
+    loop = _make_sync_loop(mocker)
+    loop._wake_word = _FakeWakeWord(vad_supported=False)
+    mocker.patch.object(loop, "_hub_register")
+
+    fake_httpx = mocker.Mock()
+    fake_httpx.post.return_value = mocker.Mock(status_code=200)  # heartbeat
+    fake_httpx.put.return_value = mocker.Mock(status_code=405)   # correction rejected
+    fake_httpx.get.return_value = mocker.Mock(
+        status_code=200, json=lambda: {"wake_word_vad_threshold": 0.4}
+    )
+
+    loop._hub_sync_tick(fake_httpx, "http://hub:8765", "abc123", "Bot", "pi")
+
+    assert loop._last_vad_request is None  # not reconciled → retried next poll
