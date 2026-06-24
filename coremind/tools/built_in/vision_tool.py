@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 def looks_like_jpeg_base64(s: str) -> bool:
     """Cheap sanity check that a tool result is a base64 image and not an error string."""
+    s = s.strip()
     if not s or s.startswith(ERROR_PREFIX) or len(s) < 64:
         return False
     try:

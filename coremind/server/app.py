@@ -521,6 +521,10 @@ try:
             logger.warning("Vision capture: camera error — %s", msg)
             return JSONResponse(status_code=502, content={"error": f"Camera error: {msg}"})
         if not looks_like_jpeg_base64(frame_b64):
+            logger.warning(
+                "Vision capture: unreadable frame — %d chars, prefix=%r",
+                len(frame_b64), frame_b64[:60],
+            )
             return JSONResponse(status_code=502, content={"error": "Camera returned an unreadable frame."})
         logger.info("Vision capture: %d chars (base64)", len(frame_b64))
         return {

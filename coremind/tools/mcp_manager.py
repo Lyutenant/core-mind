@@ -18,6 +18,67 @@ if TYPE_CHECKING:
     from coremind.config.settings import MCPServerConfig
 
 
+def _is_fastmcp_result_wrapper(output_schema) -> bool:
+    """True if an MCP tool's outputSchema is FastMCP's primitive ``result`` wrapper.
+
+    FastMCP wraps non-object returns (e.g. a tool typed ``-> str``) in a generated model
+    with a single ``result`` field, whose advertised outputSchema is an object whose
+    ``properties`` are exactly ``{"result"}``. A tool that *genuinely* returns a dict
+    (``-> dict[str, str]``) advertises a different schema (``additionalProperties`` / no
+    ``result`` property), so this lets us unwrap only the real wrapper and never strip a
+    field name off a legitimate single-key structured result.
+
+    Known, accepted limitation: a tool that genuinely returns a typed object/Pydantic
+    model whose *only* field is literally named ``result`` advertises a schema identical
+    to the wrapper here (``properties == {"result"}``, same ``structuredContent``), so it
+    will be unwrapped too. On the wire these differ only by ``title`` (the wrapper is
+    ``{func_name}Output`` vs the model's class name); we deliberately do **not** gate on
+    ``title`` because doing so would couple ``capture_image``'s correctness to a
+    FastMCP-internal naming detail and misfire on custom-named tools. The mis-unwrap is
+    contrived (needs an *external* FastMCP server — our Node tools are all ``-> str``,
+    i.e. the real wrapper) and only cosmetic (the consumer is an LLM that gets the inner
+    value instead of a one-key JSON object), so we accept it.
+    """
+    if not isinstance(output_schema, dict):
+        return False
+    props = output_schema.get("properties")
+    return isinstance(props, dict) and set(props) == {"result"}
+
+
+def _extract_tool_result(result, output_schema=None) -> str:
+    """Reduce an MCP ``CallToolResult`` to a single string.
+
+    Modern MCP servers (FastMCP on mcp>=1.10) derive an output schema from a tool's
+    return annotation and return the value as *structured output*. For a non-object
+    return (e.g. a tool typed ``-> str``) FastMCP wraps the value under a single
+    ``"result"`` key, and — for backward compat — the legacy ``content`` block carries
+    the JSON-serialized form (``{"result": "..."}``), not the raw value. Reading
+    ``content`` alone therefore hands callers a JSON wrapper instead of the string the
+    tool returned (which breaks e.g. the base64 image from ``capture_image``).
+
+    So: when the tool advertises FastMCP's ``result`` wrapper schema *and*
+    ``structuredContent`` is exactly ``{"result": <value>}``, return that value.
+    Otherwise fall back to joining the ``content`` text blocks — which preserves the
+    faithful JSON for genuine structured results and covers plain-text servers.
+    """
+    structured = getattr(result, "structuredContent", None)
+    if (
+        _is_fastmcp_result_wrapper(output_schema)
+        and isinstance(structured, dict)
+        and set(structured) == {"result"}
+    ):
+        value = structured["result"]
+        return value if isinstance(value, str) else str(value)
+
+    parts = []
+    for content in result.content:
+        if hasattr(content, "text"):
+            parts.append(content.text)
+        else:
+            parts.append(str(content))
+    return "\n".join(parts) if parts else "(empty response)"
+
+
 class MCPManager:
     """Connects to external MCP servers, fetches their tool schemas, and routes tool calls."""
 
@@ -31,6 +92,7 @@ class MCPManager:
         self._tasks: dict[str, asyncio.Task] = {}
         self._tool_to_server: dict[str, str] = {}        # tool_name → server_name
         self._schemas: list[dict] = []
+        self._output_schemas: dict[str, dict] = {}       # tool_name → outputSchema (for unwrap)
         # While a connection is held open, re-fetch its tool list every
         # `resync_interval` seconds so capabilities added on the server (e.g. a
         # newly enabled camera tool) are picked up without a reconnect or a Hub
@@ -99,13 +161,7 @@ class MCPManager:
             return f"MCP server {server_name!r} is not connected"
         try:
             result = await session.call_tool(tool_name, arguments)
-            parts = []
-            for content in result.content:
-                if hasattr(content, "text"):
-                    parts.append(content.text)
-                else:
-                    parts.append(str(content))
-            return "\n".join(parts) if parts else "(empty response)"
+            return _extract_tool_result(result, self._output_schemas.get(tool_name))
         except Exception as exc:
             logger.error("MCP tool call %r on %r failed: %s", tool_name, server_name, exc)
             return f"Tool '{tool_name}' failed: {exc}"
@@ -248,9 +304,19 @@ class MCPManager:
         self._tool_to_server = {
             k: v for k, v in self._tool_to_server.items() if v != server_name
         }
+        # Drop this server's output schemas (its tools were just removed above); other
+        # servers' entries still have a tool_to_server owner and are kept.
+        self._output_schemas = {
+            name: schema
+            for name, schema in self._output_schemas.items()
+            if name in self._tool_to_server
+        }
         for tool in result.tools:
             self._schemas.append(self._to_ollama_schema(tool))
             self._tool_to_server[tool.name] = server_name
+            output_schema = getattr(tool, "outputSchema", None)
+            if output_schema:
+                self._output_schemas[tool.name] = output_schema
         current = {tool.name for tool in result.tools}
         if current != previous:
             logger.info(

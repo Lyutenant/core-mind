@@ -9,12 +9,81 @@ from types import SimpleNamespace
 
 import pytest
 
-from coremind.tools.mcp_manager import MCPManager
+from coremind.tools.mcp_manager import MCPManager, _extract_tool_result
 
 
-def _tool(name: str):
-    """Minimal stand-in for an mcp tool object (name/description/inputSchema)."""
-    return SimpleNamespace(name=name, description=f"{name} tool", inputSchema=None)
+def _result(*, content=None, structured=None):
+    """Minimal stand-in for an mcp CallToolResult (content + structuredContent)."""
+    blocks = [SimpleNamespace(text=t) for t in (content or [])]
+    return SimpleNamespace(content=blocks, structuredContent=structured)
+
+
+# FastMCP's primitive-wrapper outputSchema: an object with exactly a `result` property.
+_WRAP_SCHEMA = {"type": "object", "properties": {"result": {"type": "string"}}, "required": ["result"]}
+
+
+def test_extract_unwraps_fastmcp_result_key():
+    """FastMCP wraps a ``-> str`` return as {"result": value} in structuredContent.
+
+    The legacy content block carries the JSON-serialized wrapper, so reading content
+    alone would hand back '{"result": "..."}'. With the wrapper outputSchema we recover
+    the raw string — this is exactly what broke the base64 image from capture_image.
+    """
+    payload = "/9j/4AAQSkZJRgABAQ" + "A" * 80  # looks like base64 JPEG
+    result = _result(content=[f'{{"result": "{payload}"}}'], structured={"result": payload})
+    assert _extract_tool_result(result, _WRAP_SCHEMA) == payload
+
+
+def test_extract_stringifies_non_string_result():
+    schema = {"type": "object", "properties": {"result": {"type": "integer"}}}
+    result = _result(content=["{\"result\": 42}"], structured={"result": 42})
+    assert _extract_tool_result(result, schema) == "42"
+
+
+def test_extract_falls_back_to_content_text():
+    """Plain-text results (no structured output) come through the content blocks."""
+    result = _result(content=["hello", "world"], structured=None)
+    assert _extract_tool_result(result, None) == "hello\nworld"
+
+
+def test_extract_preserves_genuine_single_result_field():
+    """A tool whose real schema is NOT the FastMCP wrapper keeps its JSON object.
+
+    e.g. a ``-> dict[str, str]`` tool that genuinely returns {"result": "ok"} advertises
+    an additionalProperties schema (no `result` property), so we must NOT unwrap it —
+    the field name is preserved via the faithful content JSON (Codex P2).
+    """
+    schema = {"type": "object", "additionalProperties": {"type": "string"}}
+    result = _result(content=['{"result": "ok"}'], structured={"result": "ok"})
+    assert _extract_tool_result(result, schema) == '{"result": "ok"}'
+
+
+def test_extract_does_not_unwrap_without_schema():
+    """Conservative: structuredContent {"result": ...} with no outputSchema is not unwrapped.
+
+    FastMCP always advertises the wrapper schema alongside structured content, so real
+    wrappers (capture_image) are unaffected; an unknown server's payload stays faithful.
+    """
+    result = _result(content=['{"result": "ok"}'], structured={"result": "ok"})
+    assert _extract_tool_result(result, None) == '{"result": "ok"}'
+
+
+def test_extract_ignores_multi_key_structured_content():
+    """A genuine multi-field structured result is not mistaken for the FastMCP wrapper."""
+    schema = {"type": "object", "properties": {"a": {}, "b": {}}}
+    result = _result(content=['{"a": 1, "b": 2}'], structured={"a": 1, "b": 2})
+    assert _extract_tool_result(result, schema) == '{"a": 1, "b": 2}'
+
+
+def test_extract_empty_response():
+    assert _extract_tool_result(_result(content=[], structured=None), None) == "(empty response)"
+
+
+def _tool(name: str, output_schema=None):
+    """Minimal stand-in for an mcp tool object (name/description/in+outputSchema)."""
+    return SimpleNamespace(
+        name=name, description=f"{name} tool", inputSchema=None, outputSchema=output_schema
+    )
 
 
 class FakeSession:
@@ -77,6 +146,29 @@ def test_register_schemas_failure_keeps_existing_tools():
         # Tools survive the failed poll.
         assert _names(mgr) == {"play_music", "capture_image"}
         assert mgr.tool_to_server["capture_image"] == "node"
+
+    asyncio.run(scenario())
+
+
+def test_register_schemas_captures_and_scopes_output_schemas():
+    """outputSchema is stored per tool and dropped only with its own server's tools."""
+    async def scenario():
+        mgr = MCPManager()
+        wrap = {"type": "object", "properties": {"result": {"type": "string"}}}
+
+        class _Session:
+            def __init__(self, tools):
+                self._tools = tools
+            async def list_tools(self):
+                return SimpleNamespace(tools=self._tools)
+
+        await mgr._register_schemas("node", _Session([_tool("capture_image", wrap)]))
+        await mgr._register_schemas("fs", _Session([_tool("read_file")]))
+        assert mgr._output_schemas == {"capture_image": wrap}
+
+        # Re-syncing node without the tool drops its schema; fs is untouched.
+        await mgr._register_schemas("node", _Session([_tool("play")]))
+        assert "capture_image" not in mgr._output_schemas
 
     asyncio.run(scenario())
 
