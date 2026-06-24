@@ -114,6 +114,21 @@ If recording works but playback fails with a sample rate error, the speaker may 
 
 ---
 
+## Vision / "what do you see?" not working
+
+The camera lives on the **Node (Pi)**; the vision model runs on the **Hub (Mac)**. Test each half on its own machine.
+
+- **On the Pi:** `coremind vision test -o frame.jpg`.
+  - `opencv is not installed` → `pip install 'coremind[vision]'`.
+  - `Could not open camera index N` → wrong index. Try `--device 1` (or 2…); confirm the USB webcam is detected (`ls /dev/video*`).
+- **On the Mac:** `coremind vision describe --image frame.jpg`.
+  - `ollama.vision_model is not set` → set it in the Hub `config.yaml` (e.g. `llava:7b`).
+  - Model errors / not found → `ollama pull llava:7b` (or `moondream` if low on RAM).
+- **The assistant won't "look" at all:** the `look` tool is opt-in. Confirm all three: `ollama.vision_model` is set, `look` is in the Hub's `tools.built_in`, and the Node's `vision.enabled: true`. Then check `GET /api/tools` — `capture_image` should be registered on the Node side and `look` available on the Hub.
+- **It says it can't get an image:** the Node is unreachable or its camera is off. Confirm `node_mcp.enabled: true` on the Pi, the `node` entry in the Hub's `tools.mcp_servers`, and `mcp_connected: true` in `GET /api/tools`.
+
+---
+
 ## Random noise triggers the wake word
 
 Don't just raise `threshold` — that also makes the real wake phrase harder to detect. Reach

@@ -49,6 +49,10 @@ server = [
 tools = [
     "mcp>=1.0",
 ]
+vision = [
+    # Camera capture on the Node. Headless build — no GUI/Qt deps, right for a Pi/server.
+    "opencv-python-headless>=4.8",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

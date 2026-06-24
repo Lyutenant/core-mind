@@ -19,6 +19,7 @@ tools:
 | `get_weather` | "What's the weather?" / "Will it rain tomorrow?" | wttr.in, no API key; 1–3 day forecasts with rain chance, UV index, sunrise/sunset |
 | `get_aviation_weather` | "What's the METAR at Leesburg?" / "Any PIREPs?" | NOAA aviationweather.gov, no API key; METAR/TAF/PIREP with full briefing format |
 | `lookup_airport` | "What's the ICAO for Heathrow?" / "What airport is IAD?" | Bundled offline database, 19K airports |
+| `look` | "What do you see?" / "Is the window open?" | Captures from the Node's webcam, describes it with a local Ollama vision model — see [Vision](#vision-look) below |
 
 **Weather and time defaults** (Hub `config.yaml`):
 ```yaml
@@ -36,6 +37,64 @@ app:
   taf_airport: "KIAD"    # nearest airport with TAF (small airports often lack one)
 ```
 Ask "What's the METAR?" → uses `home_airport`. Ask "Is there a TAF?" → tries `home_airport`, auto-falls back to `taf_airport`. Ask for `report_type="full"` for a complete pre-flight briefing (METAR + TAF + PIREPs).
+
+---
+
+## Vision (`look`)
+
+The `look` tool gives the assistant eyes: a **USB webcam on the Node (Pi)** captures a still frame, and a **local vision model on the Hub (Mac)** describes it. The Pi does the cheap capture; the Mac runs the model. Room images never leave your network — inference is local via Ollama.
+
+```text
+"What do you see?"  →  Pi captures a frame (capture_image, MCP)
+                    →  Mac runs ollama.vision_model on it
+                    →  spoken description
+```
+
+**Setup**
+
+1. Plug a USB webcam into the Pi and install the camera extra **on the Pi**:
+   ```bash
+   pip install 'coremind[vision]'
+   ```
+   Test it: `coremind vision test -o frame.jpg`
+
+2. Pull a vision model **on the Mac** and set it in the Hub `config.yaml`:
+   ```bash
+   ollama pull llava:7b      # or 'moondream' (small/low-RAM), 'llama3.2-vision' (best quality)
+   ```
+   ```yaml
+   ollama:
+     vision_model: llava:7b
+   tools:
+     built_in: [time, weather, airport, look]   # add 'look'
+   ```
+   Test it on the Mac: `coremind vision describe --image frame.jpg`
+
+3. Enable the camera in the Node `config.yaml`:
+   ```yaml
+   vision:
+     enabled: true
+     provider: opencv
+     camera_index: 0     # try 1, 2… if you have multiple cameras
+   ```
+   Make sure `node_mcp.enabled: true` and the Hub's `tools.mcp_servers` has the `node` entry (same as for music/ATC).
+
+Then ask **"what do you see?"** by voice or in the dashboard chat.
+
+**Dashboard snapshot**
+
+The dashboard's **Camera** card (right-hand panel of the main view) captures a still from the Node webcam and shows it in the browser — handy for aiming the camera or a quick glance without speaking. Click **Capture snapshot** to grab a frame; click **Describe this** to run the Hub vision model on that exact frame.
+
+- A raw snapshot needs only the Node's `vision.enabled` — `ollama.vision_model` is **not** required (only **Describe** uses the model).
+- Endpoints: `POST /api/vision/capture` → `{image: <data-url>, captured_at}`; `POST /api/vision/describe` (body `{image}`) → `{description}`. These are dedicated routes — `capture_image` stays blocked from `/api/tools/invoke`.
+- Same privacy posture as `look`: the frame is held in memory and streamed to the browser, never written to disk; logs record metadata only.
+
+**Privacy & notes**
+
+- Images are held in memory only and never written to disk (except `coremind vision test`, which you explicitly ask for). Logs record metadata, not images.
+- Inference is local-only — there is no cloud fallback.
+- The model can't run on the Pi (too heavy); it only runs on the Mac. The Pi just grabs the frame.
+- `look` is opt-in: it does nothing unless `ollama.vision_model` is set, `look` is in `tools.built_in`, and the Node's `vision.enabled` is true.
 
 ---
 

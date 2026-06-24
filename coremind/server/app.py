@@ -164,11 +164,21 @@ def _get_dispatcher():
         s = _get_settings()
         _dispatcher = ToolDispatcher()
         if s.tools.enabled and s.tools.built_in:
+            # The 'look' tool needs a vision-capable Ollama client (separate model).
+            vision_client = None
+            if s.ollama.vision_model:
+                from coremind.brain.ollama_client import OllamaClient
+                vision_client = OllamaClient(
+                    base_url=s.ollama.base_url,
+                    model=s.ollama.vision_model,
+                    timeout=s.brain.timeout_seconds,
+                )
             _dispatcher.register_built_ins(
                 s.tools.built_in,
                 default_timezone=s.app.user_timezone,
                 home_airport=s.app.home_airport,
                 taf_airport=s.app.taf_airport,
+                vision_client=vision_client,
             )
             logger.info("Tools loaded: %s", s.tools.built_in)
         # Re-attach the MCP manager if one is already running (survives config reloads).
@@ -464,6 +474,100 @@ try:
         except Exception as e:
             logger.error("Tool invoke error for %r: %s", name, e)
             return JSONResponse(status_code=500, content={"error": str(e)})
+
+    @app.post("/api/tools/refresh")
+    async def refresh_tools():
+        """Force an immediate re-sync of every connected MCP server's tool list.
+
+        Lets a capability just enabled on a Node (e.g. the camera's `capture_image`)
+        show up without waiting for the periodic re-sync or restarting the Hub.
+        """
+        if _mcp_manager is None:
+            return JSONResponse(
+                status_code=409,
+                content={"error": "No MCP servers configured — nothing to refresh."},
+            )
+        refreshed = await _mcp_manager.refresh()
+        logger.info("Manual MCP tool refresh: %s", refreshed)
+        return {"refreshed": refreshed}
+
+    # -----------------------------------------------------------------------
+    # Vision: manual snapshot to the dashboard
+    # -----------------------------------------------------------------------
+
+    @app.post("/api/vision/capture")
+    async def vision_capture():
+        """Capture one still frame from the Node camera and return it as a data URL.
+
+        Calls the Node's `capture_image` MCP tool directly (it is intentionally blocked
+        from /api/tools/invoke). Needs only the Node's `vision.enabled` — no vision model
+        required. The JPEG is held in memory and handed straight to the browser; it is
+        never written to disk and never logged (metadata only).
+        """
+        if _mcp_manager is None or "capture_image" not in _mcp_manager.tool_to_server:
+            return JSONResponse(
+                status_code=409,
+                content={"error": "Node camera not available — enable vision on the Node and check the node MCP connection."},
+            )
+        from coremind.node_mcp.tools.camera_capture import ERROR_PREFIX
+        from coremind.tools.built_in.vision_tool import looks_like_jpeg_base64
+        try:
+            frame_b64 = await _get_dispatcher().execute_async("capture_image", {})
+        except Exception as e:
+            logger.error("Vision capture error: %s", e)
+            return JSONResponse(status_code=502, content={"error": str(e)})
+        if frame_b64.startswith(ERROR_PREFIX):
+            msg = frame_b64[len(ERROR_PREFIX):].strip()
+            logger.warning("Vision capture: camera error — %s", msg)
+            return JSONResponse(status_code=502, content={"error": f"Camera error: {msg}"})
+        if not looks_like_jpeg_base64(frame_b64):
+            logger.warning(
+                "Vision capture: unreadable frame — %d chars, prefix=%r",
+                len(frame_b64), frame_b64[:60],
+            )
+            return JSONResponse(status_code=502, content={"error": "Camera returned an unreadable frame."})
+        logger.info("Vision capture: %d chars (base64)", len(frame_b64))
+        return {
+            "image": "data:image/jpeg;base64," + frame_b64,
+            "captured_at": datetime.datetime.utcnow().isoformat() + "Z",
+        }
+
+    @app.post("/api/vision/describe")
+    async def vision_describe(request: Request):
+        """Run the Hub vision model on an already-captured frame; return a text description.
+
+        Stateless: the dashboard posts back the base64 it is displaying, so the description
+        matches the frame on screen (no re-capture, no server-side frame cache). Requires
+        `ollama.vision_model`.
+        """
+        s = _get_settings()
+        if not s.ollama.vision_model:
+            return JSONResponse(
+                status_code=409,
+                content={"error": "Vision model not configured (set ollama.vision_model)."},
+            )
+        data = await request.json()
+        image = (data.get("image") or "").strip()
+        prefix = "data:image/jpeg;base64,"
+        if image.startswith(prefix):
+            image = image[len(prefix):]
+        from coremind.tools.built_in.vision_tool import LookAtSceneTool, looks_like_jpeg_base64
+        if not looks_like_jpeg_base64(image):
+            return JSONResponse(status_code=400, content={"error": "No valid image provided."})
+        prompt = (data.get("prompt") or "").strip() or LookAtSceneTool._DEFAULT_PROMPT
+        try:
+            from coremind.brain.ollama_client import OllamaClient
+            client = OllamaClient(
+                base_url=s.ollama.base_url,
+                model=s.ollama.vision_model,
+                timeout=s.brain.timeout_seconds,
+            )
+            # Vision inference can take several seconds — keep it off the event loop.
+            text = await asyncio.to_thread(client.describe_image, image, prompt)
+        except Exception as e:
+            logger.error("Vision describe error: %s", e)
+            return JSONResponse(status_code=502, content={"error": str(e)})
+        return {"description": text}
 
     # -----------------------------------------------------------------------
     # Conversation history

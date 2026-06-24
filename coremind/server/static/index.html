@@ -755,6 +755,20 @@
           </div>
         </div>
         <div class="stat-section">
+          <div class="stat-title">Camera</div>
+          <button class="btn primary" id="camera-capture-btn" onclick="captureSnapshot()" style="width:100%;justify-content:center">
+            📷 Capture snapshot
+          </button>
+          <div id="camera-meta" class="stat-key" style="margin-top:6px;font-size:11px;"></div>
+          <img id="camera-img" alt="camera snapshot"
+               style="display:none;width:100%;border-radius:var(--radius);margin-top:8px;border:1px solid var(--border);" />
+          <button class="btn" id="camera-describe-btn" onclick="describeSnapshot()"
+                  style="display:none;width:100%;justify-content:center;margin-top:8px">
+            Describe this
+          </button>
+          <pre class="tool-result" id="camera-desc" style="margin-top:8px;"></pre>
+        </div>
+        <div class="stat-section">
           <div class="stat-title">Actions</div>
           <button class="btn danger" onclick="clearConversation()" style="width:100%;justify-content:center">
             🗑 Clear Log
@@ -1194,7 +1208,10 @@
           <div class="tools-sidebar">
             <div class="tools-sidebar-hdr">
               <span class="tools-count-label" id="tools-count-label">Tools</span>
-              <button class="btn" style="padding:3px 8px;font-size:11px" onclick="loadTools()">↻</button>
+              <span style="display:flex;gap:6px">
+                <button class="btn" style="padding:3px 8px;font-size:11px" title="Re-fetch tool list from MCP servers (picks up newly enabled Node capabilities)" id="tools-sync-btn" onclick="syncMcpTools()">Sync MCP</button>
+                <button class="btn" style="padding:3px 8px;font-size:11px" title="Reload this view" onclick="loadTools()">↻</button>
+              </span>
             </div>
             <div class="tools-list-items" id="tools-list-items">
               <div class="nodes-empty" style="padding:30px 12px">Loading…</div>
@@ -1860,6 +1877,34 @@ async function loadTools() {
   }
 }
 
+async function syncMcpTools() {
+  const btn = document.getElementById('tools-sync-btn');
+  const label = document.getElementById('tools-count-label');
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Syncing…';
+  try {
+    const resp = await fetch('/api/tools/refresh', { method: 'POST' });
+    const data = await resp.json();
+    if (!resp.ok) {
+      label.textContent = data.error || 'Refresh failed';
+    } else {
+      // loadTools() repaints the list and the accurate tool count (the real
+      // success signal); only flag servers whose re-sync failed.
+      await loadTools();
+      const failed = Object.entries(data.refreshed || {})
+        .filter(([, n]) => n === null)
+        .map(([name]) => name);
+      if (failed.length) label.textContent += ` — sync failed: ${failed.join(', ')}`;
+    }
+  } catch (e) {
+    label.textContent = 'Refresh failed';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
 function renderToolList() {
   const container = document.getElementById('tools-list-items');
   if (!toolsData.length) {
@@ -1993,6 +2038,70 @@ async function invokeTool() {
     resultEl.className = 'tool-result err';
     resultEl.textContent = String(e);
     if (statusEl) statusEl.textContent = '✗ Failed';
+  }
+}
+
+// ── Camera snapshot ──────────────────────────────────────────────────────────
+async function captureSnapshot() {
+  const btn = document.getElementById('camera-capture-btn');
+  const img = document.getElementById('camera-img');
+  const meta = document.getElementById('camera-meta');
+  const descBtn = document.getElementById('camera-describe-btn');
+  const desc = document.getElementById('camera-desc');
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = 'Capturing…';
+  desc.style.display = 'none';
+  desc.className = 'tool-result';
+  try {
+    const r = await fetch('/api/vision/capture', { method: 'POST' });
+    const data = await r.json();
+    if (r.ok) {
+      img.src = data.image;                 // data: URL — set directly, not via esc()
+      img.style.display = 'block';
+      descBtn.style.display = 'inline-flex';
+      meta.textContent = 'captured ' + new Date(data.captured_at).toLocaleTimeString();
+    } else {
+      toast(data.error || ('Capture failed (' + r.status + ')'), 'error');
+    }
+  } catch (e) {
+    toast('Capture failed: ' + e, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+async function describeSnapshot() {
+  const img = document.getElementById('camera-img');
+  const btn = document.getElementById('camera-describe-btn');
+  const desc = document.getElementById('camera-desc');
+  if (!img.src) return;
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = 'Describing…';
+  try {
+    const r = await fetch('/api/vision/describe', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image: img.src}),
+    });
+    const data = await r.json();
+    desc.style.display = 'block';
+    if (r.ok) {
+      desc.className = 'tool-result ok';
+      desc.textContent = data.description;
+    } else {
+      desc.className = 'tool-result err';
+      desc.textContent = data.error || ('Describe failed (' + r.status + ')');
+    }
+  } catch (e) {
+    desc.style.display = 'block';
+    desc.className = 'tool-result err';
+    desc.textContent = String(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 }
 

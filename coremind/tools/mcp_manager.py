@@ -18,14 +18,89 @@ if TYPE_CHECKING:
     from coremind.config.settings import MCPServerConfig
 
 
+def _is_fastmcp_result_wrapper(output_schema) -> bool:
+    """True if an MCP tool's outputSchema is FastMCP's primitive ``result`` wrapper.
+
+    FastMCP wraps non-object returns (e.g. a tool typed ``-> str``) in a generated model
+    with a single ``result`` field, whose advertised outputSchema is an object whose
+    ``properties`` are exactly ``{"result"}``. A tool that *genuinely* returns a dict
+    (``-> dict[str, str]``) advertises a different schema (``additionalProperties`` / no
+    ``result`` property), so this lets us unwrap only the real wrapper and never strip a
+    field name off a legitimate single-key structured result.
+
+    Known, accepted limitation: a tool that genuinely returns a typed object/Pydantic
+    model whose *only* field is literally named ``result`` advertises a schema identical
+    to the wrapper here (``properties == {"result"}``, same ``structuredContent``), so it
+    will be unwrapped too. On the wire these differ only by ``title`` (the wrapper is
+    ``{func_name}Output`` vs the model's class name); we deliberately do **not** gate on
+    ``title`` because doing so would couple ``capture_image``'s correctness to a
+    FastMCP-internal naming detail and misfire on custom-named tools. The mis-unwrap is
+    contrived (needs an *external* FastMCP server — our Node tools are all ``-> str``,
+    i.e. the real wrapper) and only cosmetic (the consumer is an LLM that gets the inner
+    value instead of a one-key JSON object), so we accept it.
+    """
+    if not isinstance(output_schema, dict):
+        return False
+    props = output_schema.get("properties")
+    return isinstance(props, dict) and set(props) == {"result"}
+
+
+def _extract_tool_result(result, output_schema=None) -> str:
+    """Reduce an MCP ``CallToolResult`` to a single string.
+
+    Modern MCP servers (FastMCP on mcp>=1.10) derive an output schema from a tool's
+    return annotation and return the value as *structured output*. For a non-object
+    return (e.g. a tool typed ``-> str``) FastMCP wraps the value under a single
+    ``"result"`` key, and — for backward compat — the legacy ``content`` block carries
+    the JSON-serialized form (``{"result": "..."}``), not the raw value. Reading
+    ``content`` alone therefore hands callers a JSON wrapper instead of the string the
+    tool returned (which breaks e.g. the base64 image from ``capture_image``).
+
+    So: when the tool advertises FastMCP's ``result`` wrapper schema *and*
+    ``structuredContent`` is exactly ``{"result": <value>}``, return that value.
+    Otherwise fall back to joining the ``content`` text blocks — which preserves the
+    faithful JSON for genuine structured results and covers plain-text servers.
+    """
+    structured = getattr(result, "structuredContent", None)
+    if (
+        _is_fastmcp_result_wrapper(output_schema)
+        and isinstance(structured, dict)
+        and set(structured) == {"result"}
+    ):
+        value = structured["result"]
+        return value if isinstance(value, str) else str(value)
+
+    parts = []
+    for content in result.content:
+        if hasattr(content, "text"):
+            parts.append(content.text)
+        else:
+            parts.append(str(content))
+    return "\n".join(parts) if parts else "(empty response)"
+
+
 class MCPManager:
     """Connects to external MCP servers, fetches their tool schemas, and routes tool calls."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        resync_interval: float = 45.0,
+        resync_max_failures: int = 3,
+    ) -> None:
         self._sessions: dict[str, object] = {}           # server_name → ClientSession
         self._tasks: dict[str, asyncio.Task] = {}
         self._tool_to_server: dict[str, str] = {}        # tool_name → server_name
         self._schemas: list[dict] = []
+        self._output_schemas: dict[str, dict] = {}       # tool_name → outputSchema (for unwrap)
+        # While a connection is held open, re-fetch its tool list every
+        # `resync_interval` seconds so capabilities added on the server (e.g. a
+        # newly enabled camera tool) are picked up without a reconnect or a Hub
+        # restart. Doubles as a liveness probe: after `resync_max_failures`
+        # consecutive failed re-syncs we drop the (likely dead) session and let
+        # the reconnect loop take over.
+        self._resync_interval = resync_interval
+        self._resync_max_failures = resync_max_failures
 
     # ------------------------------------------------------------------
     # Public API
@@ -55,6 +130,24 @@ class MCPManager:
     async def get_tool_definitions(self) -> list[dict]:
         return list(self._schemas)
 
+    async def refresh(self) -> dict[str, int | None]:
+        """Force an immediate tool-list re-sync of every connected server.
+
+        Mirrors the periodic re-sync but on demand (e.g. a dashboard button), so a
+        capability just enabled on a Node is picked up without waiting for the next
+        poll. Returns {server_name: tool_count} per server; a value of ``None`` means
+        that server's re-sync failed (its previously-registered tools are kept).
+        """
+        results: dict[str, int | None] = {}
+        for name, session in list(self._sessions.items()):
+            try:
+                await self._register_schemas(name, session)
+                results[name] = sum(1 for v in self._tool_to_server.values() if v == name)
+            except Exception as exc:  # noqa: BLE001 — report per-server, don't abort the rest
+                logger.warning("MCP server %r: manual refresh failed (%s)", name, exc)
+                results[name] = None
+        return results
+
     @property
     def tool_to_server(self) -> dict[str, str]:
         return self._tool_to_server
@@ -68,13 +161,7 @@ class MCPManager:
             return f"MCP server {server_name!r} is not connected"
         try:
             result = await session.call_tool(tool_name, arguments)
-            parts = []
-            for content in result.content:
-                if hasattr(content, "text"):
-                    parts.append(content.text)
-                else:
-                    parts.append(str(content))
-            return "\n".join(parts) if parts else "(empty response)"
+            return _extract_tool_result(result, self._output_schemas.get(tool_name))
         except Exception as exc:
             logger.error("MCP tool call %r on %r failed: %s", tool_name, server_name, exc)
             return f"Tool '{tool_name}' failed: {exc}"
@@ -140,8 +227,12 @@ class MCPManager:
                             ready.set()
                         else:
                             logger.info("Reconnected to MCP server: %s", srv.name)
-                        # Hold connection open until cancelled or broken.
-                        await asyncio.get_event_loop().create_future()
+                        # Healthy (re)connect — reset the backoff for the next drop.
+                        retry_delay = 10.0
+                        # Hold the connection open, periodically re-syncing the tool
+                        # list. Returns only when the session looks dead, dropping us
+                        # into the reconnect path below.
+                        await self._hold_and_resync(srv.name, session)
 
             except asyncio.CancelledError:
                 return
@@ -165,9 +256,47 @@ class MCPManager:
                 return
             retry_delay = min(retry_delay * 1.5, 60.0)
 
+    async def _hold_and_resync(self, server_name: str, session) -> None:
+        """Hold a connected session open, periodically re-fetching its tool list.
+
+        Returns (rather than blocking forever) once `_resync_max_failures` re-syncs
+        fail in a row, signalling the caller to tear down and reconnect. A single
+        transient failure is tolerated so a healthy session isn't dropped on a blip.
+        """
+        consecutive_failures = 0
+        while True:
+            await asyncio.sleep(self._resync_interval)
+            try:
+                await self._register_schemas(server_name, session)
+                consecutive_failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — a poll failure must not crash the task
+                consecutive_failures += 1
+                logger.debug(
+                    "MCP server %r: tool re-sync failed (%s) [%d/%d]",
+                    server_name, exc, consecutive_failures, self._resync_max_failures,
+                )
+                if consecutive_failures >= self._resync_max_failures:
+                    logger.info(
+                        "MCP server %r: %d consecutive re-syncs failed — reconnecting",
+                        server_name, consecutive_failures,
+                    )
+                    return
+
     async def _register_schemas(self, server_name: str, session) -> None:
-        """Fetch tool list from a session and update _schemas / _tool_to_server."""
-        # Remove stale entries for this server before re-adding.
+        """Fetch tool list from a session and update _schemas / _tool_to_server.
+
+        The list is fetched *before* any existing entries are dropped, so a failed
+        ``list_tools`` (e.g. a dead connection during a periodic re-sync) leaves the
+        previously-registered tools intact rather than wiping them. Logs at INFO only
+        when the set of tool names changes, so the periodic re-sync stays quiet.
+        """
+        previous = {
+            name for name, owner in self._tool_to_server.items() if owner == server_name
+        }
+        result = await session.list_tools()
+        # Replace this server's entries with the freshly fetched list.
         self._schemas = [
             s for s in self._schemas
             if self._tool_to_server.get(s["function"]["name"]) != server_name
@@ -175,11 +304,29 @@ class MCPManager:
         self._tool_to_server = {
             k: v for k, v in self._tool_to_server.items() if v != server_name
         }
-        result = await session.list_tools()
+        # Drop this server's output schemas (its tools were just removed above); other
+        # servers' entries still have a tool_to_server owner and are kept.
+        self._output_schemas = {
+            name: schema
+            for name, schema in self._output_schemas.items()
+            if name in self._tool_to_server
+        }
         for tool in result.tools:
             self._schemas.append(self._to_ollama_schema(tool))
             self._tool_to_server[tool.name] = server_name
-        logger.info("MCP server %r: %d tool(s) registered", server_name, len(result.tools))
+            output_schema = getattr(tool, "outputSchema", None)
+            if output_schema:
+                self._output_schemas[tool.name] = output_schema
+        current = {tool.name for tool in result.tools}
+        if current != previous:
+            logger.info(
+                "MCP server %r: %d tool(s) registered (was %d)",
+                server_name, len(current), len(previous),
+            )
+        else:
+            logger.debug(
+                "MCP server %r: re-synced, %d tool(s) unchanged", server_name, len(current)
+            )
 
     @staticmethod
     def _to_ollama_schema(tool) -> dict:

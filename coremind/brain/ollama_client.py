@@ -76,6 +76,23 @@ class OllamaClient(BrainClient):
         data = self._post(payload)
         return data["message"]["content"]
 
+    def describe_image(self, image_b64: str, prompt: str) -> str:
+        """Run a multimodal model on a base64-encoded JPEG and return its description.
+
+        ``self.model`` must be a vision-capable model (e.g. "llava:7b"); Ollama accepts
+        the image via the per-message ``images`` field. Runs locally on the Hub — the
+        image never leaves the machine.
+        """
+        payload: dict = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt, "images": [image_b64]}],
+            "stream": False,
+        }
+        if self.options:
+            payload["options"] = self.options
+        data = self._post(payload)
+        return data["message"]["content"]
+
     def ask_with_tools(self, messages: list[dict], tools: list[dict]) -> OllamaResult:
         msgs = _inject_no_think(messages) if self.no_think else messages
         payload: dict = {

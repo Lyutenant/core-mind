@@ -45,6 +45,7 @@ brain:
 ollama:
   base_url: http://100.x.x.x:11434
   model: qwen3:8b
+  vision_model: null   # e.g. "llava:7b" — enables the 'look' tool; pull first: ollama pull llava:7b
   no_think: false
   options: {}
 
@@ -58,7 +59,7 @@ memory:
 
 tools:
   enabled: true
-  built_in: [time, weather, airport]
+  built_in: [time, weather, airport]   # add 'look' for camera vision (needs ollama.vision_model)
   # mcp_servers: []   # Phase B — list of MCP server connections
 
 vad:
@@ -79,3 +80,12 @@ wake_word:
   model: hey_jarvis_v0.1
   threshold: 0.5
   inference_framework: onnx
+
+# Camera (vision) — capture lives on the Node; the Hub runs ollama.vision_model on the frame.
+# Enable here + add 'look' to tools.built_in + set ollama.vision_model. Install: pip install 'coremind[vision]'
+vision:
+  enabled: false
+  provider: opencv     # opencv (USB webcam) | mock
+  camera_index: 0
+  resolution_width: 1280
+  resolution_height: 720
