@@ -9,8 +9,9 @@ app:
   name: Jarvis        # your assistant's name — must match the Node config
   log_level: INFO
   personality: null   # free-text tone/persona appended to the system prompt, e.g.
-                      # "A refined British butler: polite, dry wit, addresses me as 'sir'."
-                      # Easiest set from the dashboard (Settings → Application).
+                      # "A refined British butler with J.A.R.V.I.S.'s dry, occasional wit;
+                      # addresses me as 'sir'." Easiest set from the dashboard (the JARVIS
+                      # preset under Settings → Application fills this in).
   user_location: null   # e.g. "San Francisco, CA" — used as default for weather/time questions
   user_timezone: null   # IANA timezone e.g. "America/Los_Angeles", "Europe/London", "Asia/Tokyo"
   home_airport: null    # ICAO code e.g. "KJYO" — default airport for aviation weather queries

@@ -73,9 +73,9 @@ mode: hub
 
 app:
   name: Jarvis
-  personality: "A refined British butler: polite, dry wit, addresses me as 'sir'."
-                                        # free-text tone/persona (optional); easiest set from
-                                        # the dashboard (Settings → Application, with presets)
+  personality: "A refined British butler with J.A.R.V.I.S.'s dry, occasional wit; addresses me as 'sir'."
+                                        # free-text tone/persona (optional); easiest set from the
+                                        # dashboard (Settings → Application — the JARVIS preset fills this in)
   user_location: "San Francisco, CA"   # fallback for weather/time (optional)
   user_timezone: "America/Los_Angeles" # IANA timezone (optional)
   home_airport: "KJYO"                 # default for aviation weather (optional)
