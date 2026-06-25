@@ -16,6 +16,7 @@ from coremind.audio_output.player import Player
 from coremind.brain.base import BrainClient
 from coremind.memory.session_memory import SessionMemory
 from coremind.stt.base import SpeechToText
+from coremind.text_match import match_and_strip_terminator
 from coremind.tts.base import TextToSpeech
 
 if TYPE_CHECKING:
@@ -83,9 +84,14 @@ class VoiceLoop:
         on_listening_start: Callable[[], None] | None = None,
         on_turn_complete: Callable[[], None] | None = None,
         personality: str | None = None,
+        wake_confirm_words: list[str] | None = None,
     ) -> None:
         self._name = name
         self._personality = personality
+        # Terminator words required to end the first utterance after a wake word (e.g. "over").
+        # Empty list disables the gate. Used only in standalone mode; in remote mode the Hub's
+        # config governs and the Node merely signals that this is the first post-wake turn.
+        self._wake_confirm_words = [w for w in (wake_confirm_words or []) if w and w.strip()]
         self._recorder = recorder
         self._stt = stt
         self._brain = brain
@@ -340,11 +346,17 @@ class VoiceLoop:
                 self._recorder.record(seconds=self._record_seconds, output_path=tmp_path)
                 self._status("Recording complete.")
 
-            # Step 3: remote (Mac Mini handles STT + LLM + TTS) or local
+            # Step 3: remote (Mac Mini handles STT + LLM + TTS) or local.
+            # The first utterance after a wake word goes through the confirmation gate
+            # (must end with a terminator word); follow-up turns do not. In remote mode the
+            # Hub enforces it from its own config — the Node always signals the first turn.
+            require_confirm = self._wake_word is not None
             if self._remote_url:
-                transcript, response = self._run_remote(tmp_path)
+                transcript, response = self._run_remote(tmp_path, require_confirm=require_confirm)
             else:
-                transcript, response = self._process_local_wav(tmp_path)
+                transcript, response = self._process_local_wav(
+                    tmp_path, require_confirm=require_confirm
+                )
 
             if not transcript:
                 return "", ""
@@ -355,8 +367,15 @@ class VoiceLoop:
             # Always resume music, even if an exception occurred
             self._on_turn_complete()
 
-    def _process_local_wav(self, wav_path: str) -> tuple[str, str]:
-        """Transcribe + LLM + optional TTS. Deletes wav_path when done."""
+    def _process_local_wav(
+        self, wav_path: str, require_confirm: bool = False
+    ) -> tuple[str, str]:
+        """Transcribe + LLM + optional TTS. Deletes wav_path when done.
+
+        When ``require_confirm`` is set and terminator words are configured, the transcript
+        must end with one of them (the wake-confirmation gate). If it doesn't — or is only
+        the terminator — the turn is silently discarded as a false wake.
+        """
         try:
             self._status("Transcribing...")
             transcript = self._stt.transcribe(wav_path)  # type: ignore[union-attr]
@@ -365,6 +384,16 @@ class VoiceLoop:
 
         if not transcript.strip():
             return "", ""
+
+        if require_confirm and self._wake_confirm_words:
+            matched, stripped = match_and_strip_terminator(transcript, self._wake_confirm_words)
+            if not matched or not stripped.strip():
+                logger.info(
+                    "Wake confirmation word missing (%r) — discarding as false wake", transcript
+                )
+                self._status("No confirmation word — returning to wake word...")
+                return "", ""
+            transcript = stripped
 
         pending = {"role": "user", "content": transcript}
         messages = self._system_messages() + self._memory.get_messages() + [pending]  # type: ignore[union-attr]
@@ -440,9 +469,19 @@ class VoiceLoop:
                 self._status("Returning to wake word...")
                 return last_t, last_r
 
-    def _run_remote(self, wav_path: str) -> tuple[str, str]:
-        """POST wav to Mac Mini server; receive audio response + play it."""
+    def _run_remote(self, wav_path: str, require_confirm: bool = False) -> tuple[str, str]:
+        """POST wav to Mac Mini server; receive audio response + play it.
+
+        When ``require_confirm`` is set, signal the Hub that this is the first post-wake
+        utterance so it applies its wake-confirmation gate. If the Hub rejects the turn
+        (no terminator word), it returns an empty body with ``X-Rejected: terminator`` —
+        we return ("", "") so the turn ends silently and we go back to the wake word.
+        """
         import httpx
+
+        headers = {"x-session-id": self._session_id}
+        if require_confirm:
+            headers["x-confirm-gate"] = "1"
 
         self._status("Sending to server...")
         try:
@@ -450,7 +489,7 @@ class VoiceLoop:
                 resp = httpx.post(
                     f"{self._remote_url}/v1/process",
                     files={"audio": ("audio.wav", f, "audio/wav")},
-                    headers={"x-session-id": self._session_id},
+                    headers=headers,
                     timeout=self._remote_timeout,
                 )
         except httpx.ConnectError as e:
@@ -469,6 +508,15 @@ class VoiceLoop:
 
         if resp.status_code != 200:
             raise BrainError(f"Server returned HTTP {resp.status_code}")
+
+        # Wake-confirmation gate: the Hub heard speech but it lacked a terminator word, so it
+        # ran no LLM/TTS. End the turn silently (no playback) and return to the wake word.
+        if resp.headers.get("x-rejected") == "terminator":
+            logger.info(
+                "Hub discarded turn as false wake (no confirmation word): %r", transcript
+            )
+            self._status("No confirmation word — returning to wake word...")
+            return "", ""
 
         if resp.content and self._player is not None:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:

@@ -23,6 +23,24 @@ def test_defaults_load_without_config_file(tmp_path):
     assert settings.app.log_level == "INFO"
     assert settings.audio.sample_rate == 16000
     assert settings.brain.provider == "ollama"
+    # Wake-confirmation gate is on by default with a small terminator set.
+    assert settings.runtime.wake_confirm_words == ["over", "go ahead", "confirm"]
+
+
+def test_wake_confirm_words_override_and_disable(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text(textwrap.dedent("""\
+        runtime:
+          wake_confirm_words: ["roger"]
+    """))
+    assert load_settings(str(config)).runtime.wake_confirm_words == ["roger"]
+
+    disabled = tmp_path / "disabled.yaml"
+    disabled.write_text(textwrap.dedent("""\
+        runtime:
+          wake_confirm_words: null
+    """))
+    assert load_settings(str(disabled)).runtime.wake_confirm_words is None
 
 
 def test_load_valid_config_file(tmp_path):

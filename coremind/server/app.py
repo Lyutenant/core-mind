@@ -748,6 +748,7 @@ try:
     async def process_audio(
         audio: UploadFile = File(...),
         x_session_id: Optional[str] = Header(default=None),
+        x_confirm_gate: Optional[str] = Header(default=None),
     ) -> Response:
         global _turn_count
         s = _get_settings()
@@ -772,6 +773,30 @@ try:
         if not transcript.strip():
             _broadcast({"type": "status", "text": "Idle"})
             return Response(content=b"", headers={"X-Transcript": "", "X-Response": ""})
+
+        # Wake-confirmation gate: on the first post-wake utterance (signalled by the Node via
+        # X-Confirm-Gate), the transcript must end with a configured terminator word (e.g.
+        # "over") or it's discarded as a false wake — no LLM, no TTS, no spoken reply.
+        if x_confirm_gate and s.runtime.wake_confirm_words:
+            from coremind.text_match import match_and_strip_terminator
+
+            matched, stripped = match_and_strip_terminator(
+                transcript, s.runtime.wake_confirm_words
+            )
+            if not matched or not stripped.strip():
+                logger.info(
+                    "Discarding turn as false wake (no confirmation word): %r", transcript
+                )
+                _broadcast({"type": "status", "text": "Idle"})
+                return Response(
+                    content=b"",
+                    headers={
+                        "X-Transcript": urllib.parse.quote(transcript),
+                        "X-Response": "",
+                        "X-Rejected": "terminator",
+                    },
+                )
+            transcript = stripped
 
         _broadcast({"type": "transcript", "text": transcript})
         _broadcast({"type": "status", "text": "Sending to LLM..."})

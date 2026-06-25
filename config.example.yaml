@@ -19,6 +19,8 @@ runtime:
   mode: push_to_talk
   require_confirmation_for_actions: true
   follow_up_seconds: 5.0   # after a response, listen this long for a follow-up; 0.0 to disable
+  # First utterance after wake must end with one of these or it's dropped as a false wake; null disables
+  wake_confirm_words: ["over", "go ahead", "confirm"]
 
 audio:
   input_device: null

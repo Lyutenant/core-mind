@@ -42,6 +42,7 @@ class RuntimeConfig(BaseModel):
     follow_up_seconds: float = 5.0          # seconds to wait for speech onset before returning to wake word; 0.0 to disable
     follow_up_min_words: int = 2             # discard follow-up if transcript is shorter; helps filter background noise
     post_response_cooldown_seconds: float = 1.0  # silence after playback before mic reopens (suppresses echo)
+    wake_confirm_words: Optional[list[str]] = ["over", "go ahead", "confirm"]  # first utterance after wake must end with one of these or it's discarded as a false wake; null/[] disables
 
 
 class AudioConfig(BaseModel):

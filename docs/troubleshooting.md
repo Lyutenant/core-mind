@@ -140,6 +140,23 @@ for the **Wake VAD Gate** first:
   loads on demand the first time you enable the gate, so this works live, no Node restart needed.
 - If false-wakes persist at a high gate, nudge `threshold` up a little as a secondary step.
 
+### Still getting false replies (e.g. from the TV)?
+
+The acoustic knobs above reduce false *wakes*, but TV dialogue **is** speech, so it can still
+slip past the VAD gate. The **wake confirmation gate** stops the assistant from *acting* on
+them: the first thing you say after the wake word must end with a terminator word, or the turn
+is silently dropped — no reply.
+
+- It's **on by default** (`runtime.wake_confirm_words: ["over", "go ahead", "confirm"]`). Say
+  e.g. *"Hey Jarvis … what time is it **over**"*. Follow-up turns in the same conversation
+  don't need it.
+- In **remote (Node→Hub)** mode this is the **Hub's** config (Settings → it governs the gate,
+  like personality). In standalone mode it's the Node's config.
+- Trim the list to the most distinct words (`["go ahead", "confirm"]`) if a common word like
+  "over" occasionally lets TV speech through, or set it to `null` to disable the gate entirely.
+- It does **not** stop the wake chime (that fires before recording) — combine it with the
+  threshold/VAD tuning above for the quietest result.
+
 ---
 
 ## Updating

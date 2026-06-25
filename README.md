@@ -156,6 +156,7 @@ Implemented and working (v0.4.7):
 - Hub web dashboard: chat, Nodes panel, Settings editor, Tools panel — mobile-responsive
 - Configurable assistant personality (free-text persona/tone, with presets)
 - Session memory + follow-up listening window with safety mechanisms
+- Wake confirmation gate — the first command after the wake word must end with "over" (configurable) or it's dropped as a false wake; cuts false replies to TV/noise (`runtime.wake_confirm_words`)
 - Built-in tools (time, weather, aviation weather, airport) + offline 19K-airport ICAO database
 - Vision on demand — a USB webcam on the Pi lets the assistant "look" ("what do you see?"); a local Ollama vision model on the Mac describes the scene (opt-in, images stay local)
 - Hub MCP client (stdio + HTTP/SSE, auto-reconnect) and Node MCP server (13 music + 4 ATC tools)

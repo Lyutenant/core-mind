@@ -22,6 +22,10 @@ runtime:
   follow_up_seconds: 5.0         # seconds to wait for speech onset before returning to wake word; 0.0 to disable
   follow_up_min_words: 2         # ignore follow-up if transcript is this short (filters background noise)
   post_response_cooldown_seconds: 1.0  # pause after playback before mic reopens (suppresses echo)
+  # The first utterance after the wake word must END with one of these terminator words, or it's
+  # discarded as a false wake (no reply). Cuts false responses to TV/noise; follow-up turns don't
+  # need it. In remote (Node) mode THIS Hub value governs. Set to null or [] to disable.
+  wake_confirm_words: ["over", "go ahead", "confirm"]
 
 stt:
   # provider: whisper_local (recommended) or mock (silent, for testing)

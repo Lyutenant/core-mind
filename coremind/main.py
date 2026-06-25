@@ -435,6 +435,7 @@ def _build_voice_loop(
         follow_up_seconds=settings.runtime.follow_up_seconds,
         follow_up_min_words=settings.runtime.follow_up_min_words,
         post_response_cooldown_seconds=settings.runtime.post_response_cooldown_seconds,
+        wake_confirm_words=settings.runtime.wake_confirm_words,
         config_mtime=Path(_config_path).stat().st_mtime if Path(_config_path).exists() else 0.0,
         on_listening_start=on_listening_start,
         on_turn_complete=on_turn_complete,
