@@ -716,6 +716,16 @@
     <!-- Dashboard view -->
     <section class="view active" id="view-dashboard">
       <div class="conversation-panel">
+        <div class="session-bar" id="session-bar"
+             style="display:flex;align-items:center;gap:8px;padding:0 4px 8px;flex-wrap:wrap;">
+          <select id="session-select" onchange="onSessionSelect()"
+                  style="flex:1;min-width:140px;padding:6px 8px;border-radius:var(--radius);
+                         border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;"></select>
+          <button class="btn" onclick="newSession()" title="Start a new session">+ New</button>
+          <button class="btn" id="resume-live-btn" onclick="resumeLive()"
+                  style="display:none;color:var(--accent);border-color:var(--accent);"
+                  title="This device is viewing a past session">● Resume live</button>
+        </div>
         <div class="conversation-log" id="conversation-log"></div>
         <div class="chat-input-row">
           <input type="text" id="chat-input" placeholder="Type a message…"
@@ -1251,7 +1261,12 @@
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 let currentView  = 'dashboard';
-let activeSessionId = 'dashboard';  // tracks the session of the most recent voice turn
+// Session sync state. `viewedSessionId` is per-device (persisted), `activeSessionId`
+// is the server-global session new turns land in. `followActive` (default true) makes
+// this device auto-switch when the active session changes; false = pinned to a past one.
+let viewedSessionId = localStorage.getItem('cm.viewedSession') || null;
+let activeSessionId = null;
+let followActive = true;
 let currentTab   = 'app';
 let currentMode  = 'hub';
 let assistantName = 'Assistant';
@@ -1390,17 +1405,85 @@ function shortModel(m) {
   return m.length > 16 ? m.slice(0, 14) + '…' : m;
 }
 
-// ── Conversation ────────────────────────────────────────────────────────────
-async function loadConversation() {
-  const turns = await fetch('/api/conversation').then(r => r.json());
-  const log = document.getElementById('conversation-log');
-  log.innerHTML = '';
-  turns.forEach(addTurnCard);
-  // Seed the active session from the most recent loaded turn so typed follow-ups
-  // share context with the existing voice conversation immediately after reload.
-  if (turns.length > 0 && turns[turns.length - 1].session_id) {
-    activeSessionId = turns[turns.length - 1].session_id;
+// ── Sessions ────────────────────────────────────────────────────────────────
+let sessionList = [];
+
+async function fetchSessions() {
+  const data = await fetch('/api/sessions').then(r => r.json());
+  sessionList = data.sessions || [];
+  activeSessionId = data.active;
+}
+
+function renderSessionSelect() {
+  const sel = document.getElementById('session-select');
+  if (sel) {
+    sel.innerHTML = sessionList.map(s => {
+      const mark = s.id === activeSessionId ? '● ' : '';
+      const label = mark + (s.title || 'New session') + ' (' + s.round_count + ')';
+      return `<option value="${esc(s.id)}"${s.id === viewedSessionId ? ' selected' : ''}>${esc(label)}</option>`;
+    }).join('');
   }
+  const stat = document.getElementById('stat-sessions');
+  if (stat) stat.textContent = sessionList.length;
+}
+
+function updateLiveIndicator() {
+  const btn = document.getElementById('resume-live-btn');
+  if (btn) btn.style.display = followActive ? 'none' : '';
+}
+
+async function loadSession(id) {
+  if (!id) return;
+  const log = document.getElementById('conversation-log');
+  try {
+    const sess = await fetch('/api/sessions/' + id).then(r => r.json());
+    log.innerHTML = '';
+    (sess.rounds || []).forEach(addTurnCard);
+  } catch (e) { /* session may have been deleted */ }
+}
+
+// Called once on load: pick the viewed session (stored, else active) and render it.
+async function initSessions() {
+  await fetchSessions();
+  if (!viewedSessionId || !sessionList.some(s => s.id === viewedSessionId)) {
+    viewedSessionId = activeSessionId;
+    followActive = true;
+  } else {
+    followActive = (viewedSessionId === activeSessionId);
+  }
+  localStorage.setItem('cm.viewedSession', viewedSessionId);
+  renderSessionSelect();
+  updateLiveIndicator();
+  await loadSession(viewedSessionId);
+}
+
+async function onSessionSelect() {
+  const id = document.getElementById('session-select').value;
+  viewedSessionId = id;
+  localStorage.setItem('cm.viewedSession', id);
+  followActive = (id === activeSessionId);   // selecting a past session pins this device
+  updateLiveIndicator();
+  await loadSession(id);
+}
+
+async function newSession() {
+  followActive = true;
+  const sess = await fetch('/api/sessions', { method: 'POST' }).then(r => r.json());
+  viewedSessionId = sess.id;
+  localStorage.setItem('cm.viewedSession', sess.id);
+  await fetchSessions();
+  renderSessionSelect();
+  updateLiveIndicator();
+  await loadSession(sess.id);
+}
+
+async function resumeLive() {
+  followActive = true;
+  viewedSessionId = activeSessionId;
+  localStorage.setItem('cm.viewedSession', viewedSessionId);
+  renderSessionSelect();
+  updateLiveIndicator();
+  await loadSession(viewedSessionId);
 }
 
 function renderToolChips(toolCalls) {
@@ -1480,9 +1563,9 @@ function esc(s) {
 }
 
 async function clearConversation() {
-  if (!confirm('Clear all conversation history?')) return;
+  if (!confirm('Clear the active session\'s history?')) return;
   await fetch('/api/conversation', { method: 'DELETE' });
-  document.getElementById('conversation-log').innerHTML = '';
+  // The conversation_cleared SSE event clears the log on every device viewing it.
   toast('Conversation cleared');
 }
 
@@ -1506,25 +1589,49 @@ function handleEvent(ev) {
       setStatus(ev.text, ev.text !== 'Idle');
       break;
     case 'transcript':
-      addPendingCard(ev.text);
+      if (followActive) addPendingCard(ev.text);   // pending UI only on the live session
       break;
     case 'tool_call':
-      addPendingToolChip(ev.name);
+      if (followActive) addPendingToolChip(ev.name);
       break;
     case 'turn': {
       const pending = document.getElementById('turn-pending');
       if (pending) pending.remove();
       if (ev.session_id) activeSessionId = ev.session_id;
-      addTurnCard(ev);
+      if (ev.session_id === viewedSessionId) addTurnCard(ev);
+      fetchSessions().then(renderSessionSelect);   // refresh round counts / title
       refreshHealth();
       break;
     }
+    case 'session_activated':
+      activeSessionId = ev.session_id;
+      fetchSessions().then(() => {
+        if (followActive) {
+          viewedSessionId = activeSessionId;
+          localStorage.setItem('cm.viewedSession', viewedSessionId);
+          loadSession(viewedSessionId);
+        }
+        renderSessionSelect();
+        updateLiveIndicator();
+      });
+      break;
+    case 'session_list_changed':
+      fetchSessions().then(renderSessionSelect);
+      break;
     case 'config_saved':
       toast('Configuration saved', 'success');
       refreshHealth();
+      // Live-sync the Settings form on other devices, unless the user is mid-edit.
+      if (!(currentView === 'settings' && document.activeElement &&
+            document.activeElement.closest && document.activeElement.closest('#view-settings'))) {
+        loadConfig();
+      }
       break;
     case 'conversation_cleared':
-      document.getElementById('conversation-log').innerHTML = '';
+      if (!ev.session_id || ev.session_id === viewedSessionId) {
+        document.getElementById('conversation-log').innerHTML = '';
+      }
+      fetchSessions().then(renderSessionSelect);
       break;
     case 'node_connected':
       loadNodes();
@@ -2125,7 +2232,7 @@ async function sendChat() {
     const r = await fetch('/v1/chat', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({text, session_id: activeSessionId}),
+      body: JSON.stringify({text, session_id: viewedSessionId}),
     });
     if (!r.ok) toast('Chat request failed (' + r.status + ')', 'error');
   } catch (e) {
@@ -2160,7 +2267,7 @@ document.addEventListener('DOMContentLoaded', () => {
   wirePersonaPresets();
   connectSSE();
   refreshHealth();
-  loadConversation();
+  initSessions();
   loadNodes();
   setInterval(refreshHealth, 30000);
 });

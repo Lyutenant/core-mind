@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import json
 import logging
+import os
 import tempfile
 import urllib.parse
 import uuid
@@ -24,8 +25,9 @@ _stt = None
 _tts = None
 _brain = None
 _dispatcher = None
-_sessions: dict = {}
-_conversation_log: list[dict] = []
+_sessions: dict = {}                    # session_id → live SessionMemory (LLM context cache)
+_sessions_registry: dict[str, dict] = {}   # session_id → Session (durable rounds, persisted)
+_active_session_id: str | None = None   # the one session new voice/chat turns land in
 _event_listeners: list[asyncio.Queue] = []
 _turn_count: int = 0
 _node_registry: dict[str, dict] = {}   # node_id → {name, hostname, online, last_seen, config_overrides}
@@ -55,6 +57,131 @@ def _save_node_overrides(data: dict) -> None:
 
 
 _persisted_overrides: dict = _load_node_overrides()
+
+# ---------------------------------------------------------------------------
+# Sessions  (~/.coremind/sessions.json on the Hub)
+#
+# A Session groups a conversation's rounds under a hash id. The server keeps many
+# sessions and marks exactly one *active* (new voice/chat turns land there); each
+# dashboard device chooses which session it *views*. Persisted across restarts so
+# the conversation history survives a Hub restart and stays shared across devices.
+# ---------------------------------------------------------------------------
+
+_SESSIONS_PATH = Path.home() / ".coremind" / "sessions.json"
+_MAX_SESSIONS = 50
+_MAX_ROUNDS = 200
+
+
+def _new_session() -> dict:
+    now = datetime.datetime.now().isoformat()
+    return {
+        "id": uuid.uuid4().hex,
+        "title": "New session",
+        "created_at": now,
+        "updated_at": now,
+        "rounds": [],
+    }
+
+
+def _most_recent_session_id() -> str:
+    return max(_sessions_registry.values(), key=lambda s: s.get("updated_at", ""))["id"]
+
+
+def _save_sessions() -> None:
+    """Atomically persist the session registry (tempfile + os.replace)."""
+    try:
+        _SESSIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(
+            {"active": _active_session_id, "sessions": _sessions_registry}, indent=2
+        )
+        fd, tmp = tempfile.mkstemp(dir=str(_SESSIONS_PATH.parent), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                f.write(payload)
+            os.replace(tmp, _SESSIONS_PATH)
+        finally:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+    except Exception as exc:
+        logger.warning("Could not save sessions: %s", exc)
+
+
+def _load_sessions() -> None:
+    global _sessions_registry, _active_session_id
+    try:
+        if _SESSIONS_PATH.exists():
+            data = json.loads(_SESSIONS_PATH.read_text())
+            sessions = data.get("sessions")
+            if isinstance(sessions, dict):
+                _sessions_registry = sessions
+            _active_session_id = data.get("active")
+    except Exception as exc:
+        logger.warning("Could not load sessions: %s", exc)
+    # Enforce invariants: a non-empty registry with a valid active pointer.
+    if not _sessions_registry:
+        s = _new_session()
+        _sessions_registry[s["id"]] = s
+        _active_session_id = s["id"]
+    elif _active_session_id not in _sessions_registry:
+        _active_session_id = _most_recent_session_id()
+
+
+def _prune_sessions() -> None:
+    """Keep the most-recently-updated _MAX_SESSIONS (never drop the active one)."""
+    if len(_sessions_registry) <= _MAX_SESSIONS:
+        return
+    ordered = sorted(
+        _sessions_registry.values(), key=lambda s: s.get("updated_at", ""), reverse=True
+    )
+    keep = {s["id"] for s in ordered[:_MAX_SESSIONS]}
+    keep.add(_active_session_id)
+    for sid in list(_sessions_registry.keys()):
+        if sid not in keep:
+            del _sessions_registry[sid]
+            _sessions.pop(sid, None)
+
+
+def _get_active_session() -> dict:
+    """Return the active session, repairing the pointer / creating one if needed."""
+    global _active_session_id
+    if _active_session_id not in _sessions_registry:
+        if _sessions_registry:
+            _active_session_id = _most_recent_session_id()
+        else:
+            s = _new_session()
+            _sessions_registry[s["id"]] = s
+            _active_session_id = s["id"]
+    return _sessions_registry[_active_session_id]
+
+
+def _set_active(session_id: str) -> dict:
+    """Make a session active and broadcast it (so follow-mode devices switch)."""
+    global _active_session_id
+    sess = _sessions_registry.get(session_id) or _get_active_session()
+    _active_session_id = sess["id"]
+    _save_sessions()
+    _broadcast(
+        {"type": "session_activated", "session_id": sess["id"], "title": sess["title"]}
+    )
+    return sess
+
+
+def _append_round(session_id: str, turn: dict) -> None:
+    """Append a completed turn to a session, trim, title, persist."""
+    sess = _sessions_registry.get(session_id) or _get_active_session()
+    sess["rounds"].append(turn)
+    if len(sess["rounds"]) > _MAX_ROUNDS:
+        sess["rounds"] = sess["rounds"][-_MAX_ROUNDS:]
+    if sess.get("title", "New session") == "New session":
+        first = (turn.get("transcript") or "").strip()
+        if first:
+            sess["title"] = first[:60]
+    sess["updated_at"] = datetime.datetime.now().isoformat()
+    _save_sessions()
+
+
+_load_sessions()
+
 
 def _build_system_prompt(s) -> str:
     parts = [
@@ -199,7 +326,17 @@ def _reset_singletons() -> None:
 def _get_session(session_id: str):
     from coremind.memory.session_memory import SessionMemory
     if session_id not in _sessions:
-        _sessions[session_id] = SessionMemory(max_turns=_get_settings().memory.max_turns)
+        mem = SessionMemory(max_turns=_get_settings().memory.max_turns)
+        # Seed the live context from the session's persisted rounds so a
+        # restart-resumed (or device-switched) conversation keeps its memory.
+        sess = _sessions_registry.get(session_id)
+        if sess:
+            for rnd in sess["rounds"][-mem.max_turns:]:
+                if rnd.get("transcript"):
+                    mem.add("user", rnd["transcript"])
+                if rnd.get("response"):
+                    mem.add("assistant", rnd["response"])
+        _sessions[session_id] = mem
     return _sessions[session_id]
 
 
@@ -575,14 +712,93 @@ try:
 
     @app.get("/api/conversation")
     async def get_conversation():
-        return _conversation_log
+        # Back-compat: the active session's rounds.
+        return _get_active_session()["rounds"]
 
     @app.delete("/api/conversation")
     async def clear_conversation():
-        _conversation_log.clear()
-        _sessions.clear()
-        _broadcast({"type": "conversation_cleared"})
+        # "Clear" empties the active session (and its live memory); next turn re-titles.
+        sess = _get_active_session()
+        sess["rounds"] = []
+        sess["title"] = "New session"
+        sess["updated_at"] = datetime.datetime.now().isoformat()
+        _sessions.pop(sess["id"], None)
+        _save_sessions()
+        _broadcast({"type": "conversation_cleared", "session_id": sess["id"]})
+        _broadcast({"type": "session_list_changed"})
         return {"status": "cleared"}
+
+    # -----------------------------------------------------------------------
+    # Sessions (cross-device conversation sync)
+    # -----------------------------------------------------------------------
+
+    @app.get("/api/sessions")
+    async def list_sessions():
+        _get_active_session()  # guarantee a valid active session for first load
+        items = [
+            {
+                "id": s["id"],
+                "title": s["title"],
+                "created_at": s["created_at"],
+                "updated_at": s["updated_at"],
+                "round_count": len(s["rounds"]),
+                "active": s["id"] == _active_session_id,
+            }
+            for s in sorted(
+                _sessions_registry.values(),
+                key=lambda s: s.get("updated_at", ""),
+                reverse=True,
+            )
+        ]
+        return {"active": _active_session_id, "sessions": items}
+
+    @app.post("/api/sessions")
+    async def create_session():
+        global _active_session_id
+        sess = _new_session()
+        _sessions_registry[sess["id"]] = sess
+        _active_session_id = sess["id"]
+        _prune_sessions()
+        _save_sessions()
+        _broadcast(
+            {"type": "session_activated", "session_id": sess["id"], "title": sess["title"]}
+        )
+        _broadcast({"type": "session_list_changed"})
+        return sess
+
+    @app.get("/api/sessions/{session_id}")
+    async def get_session(session_id: str):
+        sess = _sessions_registry.get(session_id)
+        if sess is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        return sess
+
+    @app.post("/api/sessions/{session_id}/activate")
+    async def activate_session(session_id: str):
+        if session_id not in _sessions_registry:
+            raise HTTPException(status_code=404, detail="session not found")
+        sess = _set_active(session_id)
+        return {"status": "activated", "active": sess["id"]}
+
+    @app.delete("/api/sessions/{session_id}")
+    async def delete_session(session_id: str):
+        global _active_session_id
+        if session_id not in _sessions_registry:
+            raise HTTPException(status_code=404, detail="session not found")
+        del _sessions_registry[session_id]
+        _sessions.pop(session_id, None)
+        active_changed = _active_session_id == session_id
+        if active_changed:
+            _active_session_id = None
+            _get_active_session()  # pick a survivor or create a fresh one
+        _save_sessions()
+        if active_changed:
+            sess = _sessions_registry[_active_session_id]
+            _broadcast(
+                {"type": "session_activated", "session_id": sess["id"], "title": sess["title"]}
+            )
+        _broadcast({"type": "session_list_changed"})
+        return {"status": "deleted", "active": _active_session_id}
 
     # -----------------------------------------------------------------------
     # SSE events
@@ -752,7 +968,9 @@ try:
     ) -> Response:
         global _turn_count
         s = _get_settings()
-        session_id = x_session_id or str(uuid.uuid4())
+        # Voice turns flow into the active session (shared with dashboard chat),
+        # so the transcript and LLM memory are unified across voice and typing.
+        session_id = _get_active_session()["id"]
 
         _broadcast({"type": "status", "text": "Audio received — transcribing..."})
 
@@ -851,10 +1069,9 @@ try:
             "response": response_text,
             "tool_calls": tool_calls_used,
             "session_id": session_id,
+            "source": "voice",
         }
-        _conversation_log.append(turn)
-        if len(_conversation_log) > 200:
-            _conversation_log.pop(0)
+        _append_round(session_id, turn)
 
         _broadcast({"type": "turn", **turn})
         _broadcast({"type": "status", "text": "Idle"})
@@ -876,7 +1093,15 @@ try:
         if not text:
             raise HTTPException(status_code=400, detail="text required")
 
-        session_id = data.get("session_id", "dashboard")
+        # Typing into a viewed session continues it (and brings it to front as the
+        # active session); unknown/missing ids fall back to the active session.
+        requested = data.get("session_id")
+        if requested and requested in _sessions_registry:
+            if requested != _active_session_id:
+                _set_active(requested)
+            session_id = requested
+        else:
+            session_id = _get_active_session()["id"]
         s = _get_settings()
 
         _broadcast({"type": "transcript", "text": text})
@@ -916,9 +1141,7 @@ try:
             "session_id": session_id,
             "source": "chat",
         }
-        _conversation_log.append(turn)
-        if len(_conversation_log) > 200:
-            _conversation_log.pop(0)
+        _append_round(session_id, turn)
 
         _broadcast({"type": "turn", **turn})
         _broadcast({"type": "status", "text": "Idle"})
