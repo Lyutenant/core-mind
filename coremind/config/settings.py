@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 import yaml
 from pydantic import BaseModel, field_validator
@@ -46,11 +46,21 @@ class RuntimeConfig(BaseModel):
 
 
 class AudioConfig(BaseModel):
-    input_device: Optional[int] = None
-    output_device: Optional[int] = None
+    # None/"auto" → auto-select by stable name; int → PortAudio index; str → name substring.
+    input_device: Optional[Union[int, str]] = None
+    output_device: Optional[Union[int, str]] = None
     sample_rate: int = 16000
     channels: int = 1
     record_seconds: int = 6
+
+    @field_validator("input_device", "output_device", mode="before")
+    @classmethod
+    def coerce_numeric_device(cls, v):
+        # Env-var overrides and YAML quirks can deliver a numeric index as a
+        # string; collapse "1" → 1 so it isn't matched as a device *name*.
+        if isinstance(v, str) and v.strip().isdigit():
+            return int(v.strip())
+        return v
 
 
 class STTConfig(BaseModel):
@@ -159,14 +169,17 @@ class VisionConfig(BaseModel):
     """
     enabled: bool = False
     provider: str = "opencv"            # "opencv" (USB webcam via opencv-python) or "mock"
-    camera_index: int = 0              # 0 = first camera; 1+ for additional USB cameras
+    # None → auto-select a camera by stable /dev/v4l/by-id path; an int pins that index.
+    camera_index: Optional[int] = None
+    # Explicit stable device path (e.g. /dev/v4l/by-id/usb-...-video-index0); wins over camera_index.
+    camera_device: Optional[str] = None
     resolution_width: int = 1280
     resolution_height: int = 720
 
     @field_validator("camera_index")
     @classmethod
-    def validate_camera_index(cls, v: int) -> int:
-        if v < 0:
+    def validate_camera_index(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
             raise ValueError("camera_index must be >= 0")
         return v
 

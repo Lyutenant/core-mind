@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Optional
 
 from coremind import VisionError
 from coremind.vision.base import Camera
@@ -27,6 +28,7 @@ class OpenCVCamera(Camera):
         jpeg_quality: int = 80,
         warmup_seconds: float = 2.0,
         dark_threshold: float = 10.0,
+        camera_device: Optional[str] = None,
     ) -> None:
         try:
             import cv2
@@ -36,6 +38,9 @@ class OpenCVCamera(Camera):
             ) from e
         self._cv2 = cv2
         self.camera_index = camera_index
+        # A stable /dev path (e.g. /dev/v4l/by-id/...); when set, takes precedence
+        # over the enumeration index so it survives USB re-enumeration.
+        self.camera_device = camera_device
         self.width = width
         self.height = height
         self.max_dimension = max_dimension
@@ -45,11 +50,12 @@ class OpenCVCamera(Camera):
 
     def capture_jpeg(self) -> bytes:
         cv2 = self._cv2
-        cap = cv2.VideoCapture(self.camera_index)
+        source = self.camera_device if self.camera_device else self.camera_index
+        cap = cv2.VideoCapture(source)
         try:
             if not cap.isOpened():
                 raise VisionError(
-                    f"Could not open camera index {self.camera_index}. "
+                    f"Could not open camera {source!r}. "
                     "Check the USB webcam connection (try: coremind vision test)."
                 )
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)

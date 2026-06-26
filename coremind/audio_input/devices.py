@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
-from coremind import AudioInputError
+from coremind import AudioInputError, device_cache
+
+logger = logging.getLogger(__name__)
+
+# Names that should never be auto-picked as the mic: a UVC webcam usually also
+# exposes an audio capture endpoint, which is rarely the mic the user wants.
+_WEBCAM_NAME_TOKENS = ("cam", "camera", "webcam")
 
 
 @dataclass
@@ -75,3 +82,98 @@ def get_default_output_device() -> Optional[AudioDevice]:
         return next((d for d in _query_all() if d.index == idx and d.is_output()), None)
     except Exception:
         return None
+
+
+def coerce_device(value: Optional[Union[int, str]]) -> Optional[Union[int, str]]:
+    """Normalize a device value: an all-digit string becomes an int index.
+
+    Config from YAML preserves types, but env-var overrides and pydantic's
+    smart-union can leave a numeric value as a string — which sounddevice would
+    then treat as a *name* substring rather than an index. This collapses
+    ``"1"`` → ``1`` while leaving genuine name substrings (``"USB Audio"``)
+    untouched.
+    """
+    if isinstance(value, str):
+        s = value.strip()
+        return int(s) if s.isdigit() else s
+    return value
+
+
+def _name_present(name: str, devices: list[AudioDevice]) -> bool:
+    needle = name.lower()
+    return any(needle in d.name.lower() for d in devices)
+
+
+def _auto_select_name(
+    devices: list[AudioDevice],
+    cached: Optional[str],
+    default: Optional[AudioDevice],
+    avoid_webcam: bool,
+) -> Optional[str]:
+    if not devices:
+        return None
+    if cached and _name_present(cached, devices):
+        return cached
+    usb = [d for d in devices if "usb" in d.name.lower()]
+    if avoid_webcam:
+        preferred = [
+            d for d in usb
+            if not any(t in d.name.lower() for t in _WEBCAM_NAME_TOKENS)
+        ]
+        if preferred:
+            return preferred[0].name
+    if usb:
+        return usb[0].name
+    if default is not None:
+        return default.name
+    return devices[0].name
+
+
+def auto_select_input_name() -> Optional[str]:
+    """Pick a sensible default microphone, pinned by name. None = let PortAudio decide."""
+    return _auto_select_name(
+        list_input_devices(),
+        device_cache.get(device_cache.INPUT_KEY),
+        get_default_input_device(),
+        avoid_webcam=True,
+    )
+
+
+def auto_select_output_name() -> Optional[str]:
+    """Pick a sensible default speaker, pinned by name. None = let PortAudio decide."""
+    return _auto_select_name(
+        list_output_devices(),
+        device_cache.get(device_cache.OUTPUT_KEY),
+        get_default_output_device(),
+        avoid_webcam=False,
+    )
+
+
+def resolve_input_device(
+    configured: Optional[Union[int, str]],
+) -> Optional[Union[int, str]]:
+    """Resolve the configured mic value to a device, auto-selecting if unset.
+
+    Explicit int (index) or name substring is returned as-is. ``None`` or
+    ``"auto"`` triggers name-based auto-selection (logged once, persisted).
+    """
+    if configured not in (None, "auto"):
+        return coerce_device(configured)
+    name = auto_select_input_name()
+    if name is not None:
+        logger.info("Auto-selected microphone: '%s'", name)
+        device_cache.remember(device_cache.INPUT_KEY, name)
+    return name
+
+
+def resolve_output_device(
+    configured: Optional[Union[int, str]],
+) -> Optional[Union[int, str]]:
+    """Resolve the configured speaker value to a device, auto-selecting if unset."""
+    if configured not in (None, "auto"):
+        return coerce_device(configured)
+    name = auto_select_output_name()
+    if name is not None:
+        logger.info("Auto-selected speaker: '%s'", name)
+        device_cache.remember(device_cache.OUTPUT_KEY, name)
+    return name

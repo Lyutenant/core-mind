@@ -75,6 +75,11 @@ coremind vision test -o frame.jpg   # plug in a USB webcam, confirm it captures
 ```
 Then set `vision.enabled: true` in the Node config (step 5) and `ollama.vision_model` on the Hub. Full walkthrough: [Tools → Vision](tools.md#vision-look).
 
+The camera is also **auto-selected by a stable path** when `vision.camera_index` and
+`vision.camera_device` are left `null` — CoreMind picks a `/dev/v4l/by-id/...` symlink, which
+(unlike `/dev/videoN`) keeps pointing at the same webcam across hub replugs and reboots. To pin
+one explicitly, run `ls -l /dev/v4l/by-id/` and set `vision.camera_device` to that path.
+
 ---
 
 ## 5. Create the Node config
@@ -83,7 +88,7 @@ Then set `vision.enabled: true` in the Node config (step 5) and `ollama.vision_m
 ```bash
 coremind setup        # opens config UI at http://<pi-ip>:8766
 ```
-Set Mode to **Node**, enter the Hub URL, set audio device indexes, save, Ctrl+C.
+Set Mode to **Node**, enter the Hub URL (audio devices auto-select by default — see step 6), save, Ctrl+C.
 
 **Option B — copy and edit manually:**
 ```bash
@@ -98,8 +103,8 @@ app:
   name: Jarvis   # must match the Hub's name
 
 audio:
-  input_device: null    # set to your USB mic index (see step 6)
-  output_device: null   # set to your speaker index
+  input_device: null    # null = auto-select the mic by stable name (see step 6)
+  output_device: null   # null = auto-select the speaker by stable name
   sample_rate: 16000
 
 runtime:
@@ -134,13 +139,31 @@ node_mcp:
 
 ---
 
-## 6. Find audio device indexes
+## 6. Audio device selection (auto by default)
+
+Leave `audio.input_device` / `audio.output_device` as `null` and CoreMind **auto-selects**
+the mic and speaker for you — it scans the devices, prefers a USB audio device, and pins it
+**by name** (not by enumeration index). Because the choice is matched by name and cached in
+`~/.coremind/device-cache.json`, the **same physical mic/speaker keeps being used even after
+you plug everything into a powered USB hub or reboot** — indexes can shuffle, names don't. The
+pick is logged at startup, and `coremind doctor` shows which devices were chosen.
+
+To pin a specific device, list them:
 
 ```bash
 coremind audio list-devices
 ```
 
-Update `audio.input_device` and `audio.output_device` in `config.yaml` with the correct indexes.
+Then set either the **Index** number or a **Name** substring (the Name column is the matchable
+text — hub-safe) in `config.yaml`:
+
+```yaml
+audio:
+  input_device: "USB Audio CODEC"   # name substring (recommended) — or an index like 1
+  output_device: "USB Speaker"
+```
+
+> Two *identical* USB audio products share a name; pin one explicitly if auto picks the wrong one.
 
 ---
 

@@ -23,6 +23,8 @@ runtime:
   wake_confirm_words: ["over", "go ahead", "confirm"]
 
 audio:
+  # null = auto-select the mic/speaker by stable name (USB-hub/reboot safe). Or pin an
+  # index or name substring from `coremind audio list-devices`, e.g. "USB Audio CODEC".
   input_device: null
   output_device: null
   sample_rate: 16000
@@ -88,6 +90,10 @@ wake_word:
 vision:
   enabled: false
   provider: opencv     # opencv (USB webcam) | mock
-  camera_index: 0
+  # null = auto-select a camera by its stable /dev/v4l/by-id path. Or pin one:
+  #   camera_device: "/dev/v4l/by-id/usb-Foo_Webcam-video-index0"   # preferred (hub-safe)
+  #   camera_index: 1
+  camera_index: null
+  camera_device: null
   resolution_width: 1280
   resolution_height: 720

@@ -7,7 +7,8 @@ logger = logging.getLogger(__name__)
 
 # Module-level config, set by init_camera() at server startup (mirrors music_player/atc_player).
 _provider: str = "opencv"
-_camera_index: int = 0
+_camera_index: "int | None" = None
+_camera_device: "str | None" = None
 _width: int = 1280
 _height: int = 720
 
@@ -18,13 +19,15 @@ ERROR_PREFIX = "CAMERA_ERROR:"
 
 def init_camera(
     provider: str = "opencv",
-    camera_index: int = 0,
+    camera_index: "int | None" = None,
     width: int = 1280,
     height: int = 720,
+    camera_device: "str | None" = None,
 ) -> None:
-    global _provider, _camera_index, _width, _height
+    global _provider, _camera_index, _camera_device, _width, _height
     _provider = provider
     _camera_index = camera_index
+    _camera_device = camera_device
     _width = width
     _height = height
 
@@ -33,8 +36,13 @@ def _build_camera():
     if _provider == "mock":
         from coremind.vision.base import MockCamera
         return MockCamera()
+    from coremind.vision.camera_select import resolve_camera_source
     from coremind.vision.opencv_camera import OpenCVCamera
-    return OpenCVCamera(camera_index=_camera_index, width=_width, height=_height)
+
+    source = resolve_camera_source(_camera_device, _camera_index)
+    if isinstance(source, str):
+        return OpenCVCamera(camera_device=source, width=_width, height=_height)
+    return OpenCVCamera(camera_index=source, width=_width, height=_height)
 
 
 def capture_image() -> str:

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from math import gcd
-from typing import Optional
+from typing import Optional, Union
 
 from coremind import AudioOutputError
 
 
 class Player:
-    def __init__(self, device: Optional[int] = None) -> None:
+    def __init__(self, device: Optional[Union[int, str]] = None) -> None:
         self.device = device
 
     def play(self, wav_path: str) -> None:

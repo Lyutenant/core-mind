@@ -132,6 +132,111 @@ def test_opencv_camera_missing_dependency(monkeypatch):
         OpenCVCamera()
 
 
+def _capture_source(monkeypatch):
+    """Install fake cv2, record the VideoCapture source argument."""
+    fake = _install_fake_cv2(monkeypatch)
+    captured = {}
+    orig = fake.VideoCapture
+
+    def _rec(src):
+        captured["src"] = src
+        return orig(src)
+
+    fake.VideoCapture = _rec
+    return captured
+
+
+def test_opencv_camera_uses_device_path_over_index(monkeypatch):
+    captured = _capture_source(monkeypatch)
+    from coremind.vision.opencv_camera import OpenCVCamera
+
+    path = "/dev/v4l/by-id/usb-Foo_Webcam-video-index0"
+    OpenCVCamera(camera_index=3, camera_device=path).capture_jpeg()
+    assert captured["src"] == path
+
+
+def test_opencv_camera_uses_index_when_no_device(monkeypatch):
+    captured = _capture_source(monkeypatch)
+    from coremind.vision.opencv_camera import OpenCVCamera
+
+    OpenCVCamera(camera_index=2).capture_jpeg()
+    assert captured["src"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Camera auto-selection (camera_select)
+# ---------------------------------------------------------------------------
+
+def test_list_camera_devices_reads_by_id(tmp_path, monkeypatch):
+    from coremind.vision import camera_select
+
+    (tmp_path / "usb-Foo-video-index0").write_text("")
+    (tmp_path / "usb-Foo-video-index1").write_text("")
+    monkeypatch.setattr(camera_select, "_BY_ID_DIR", tmp_path)
+    devices = camera_select.list_camera_devices()
+    assert devices == [str(tmp_path / "usb-Foo-video-index0"), str(tmp_path / "usb-Foo-video-index1")]
+
+
+def test_list_camera_devices_empty_when_dir_missing(tmp_path, monkeypatch):
+    from coremind.vision import camera_select
+
+    monkeypatch.setattr(camera_select, "_BY_ID_DIR", tmp_path / "nope")
+    assert camera_select.list_camera_devices() == []
+
+
+def test_auto_select_camera_picks_index0(monkeypatch):
+    from coremind import device_cache
+    from coremind.vision import camera_select
+
+    monkeypatch.setattr(camera_select, "list_camera_devices",
+                        lambda: ["/dev/v4l/by-id/cam-video-index1", "/dev/v4l/by-id/cam-video-index0"])
+    monkeypatch.setattr(device_cache, "get", lambda key: None)
+    assert camera_select.auto_select_camera() == "/dev/v4l/by-id/cam-video-index0"
+
+
+def test_resolve_camera_source_precedence(monkeypatch):
+    from coremind import device_cache
+    from coremind.vision import camera_select
+
+    monkeypatch.setattr(device_cache, "remember", lambda *a: None)
+    monkeypatch.setattr(camera_select, "auto_select_camera", lambda: "/dev/v4l/by-id/auto-index0")
+
+    # Explicit path wins over everything.
+    assert camera_select.resolve_camera_source("/dev/explicit", 5) == "/dev/explicit"
+    # Explicit index wins over auto.
+    assert camera_select.resolve_camera_source(None, 5) == 5
+    # Falls back to auto-selection when both unset.
+    assert camera_select.resolve_camera_source(None, None) == "/dev/v4l/by-id/auto-index0"
+
+
+def test_resolve_camera_source_falls_back_to_zero(monkeypatch):
+    from coremind import device_cache
+    from coremind.vision import camera_select
+
+    monkeypatch.setattr(device_cache, "remember", lambda *a: None)
+    monkeypatch.setattr(camera_select, "auto_select_camera", lambda: None)
+    assert camera_select.resolve_camera_source(None, None) == 0
+
+
+# ---------------------------------------------------------------------------
+# VisionConfig defaults
+# ---------------------------------------------------------------------------
+
+def test_vision_config_defaults():
+    from coremind.config.settings import VisionConfig
+
+    cfg = VisionConfig()
+    assert cfg.camera_index is None      # None → auto-select
+    assert cfg.camera_device is None
+
+
+def test_vision_config_rejects_negative_index():
+    from coremind.config.settings import VisionConfig
+
+    with pytest.raises(ValueError):
+        VisionConfig(camera_index=-1)
+
+
 # ---------------------------------------------------------------------------
 # Node capture_image tool
 # ---------------------------------------------------------------------------

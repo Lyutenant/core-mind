@@ -14,7 +14,8 @@ def create_node_mcp_server(
     port: int = 8767,
     camera_enabled: bool = False,
     camera_provider: str = "opencv",
-    camera_index: int = 0,
+    camera_index: int | None = None,
+    camera_device: str | None = None,
     camera_width: int = 1280,
     camera_height: int = 720,
 ):
@@ -148,6 +149,7 @@ def create_node_mcp_server(
         camera_capture.init_camera(
             provider=camera_provider,
             camera_index=camera_index,
+            camera_device=camera_device,
             width=camera_width,
             height=camera_height,
         )
@@ -157,7 +159,10 @@ def create_node_mcp_server(
             """Capture a still image from the Node's camera. Returns a base64-encoded JPEG."""
             return camera_capture.capture_image()
 
-        logger.info("Node camera enabled (provider=%s, index=%d)", camera_provider, camera_index)
+        logger.info(
+            "Node camera enabled (provider=%s, index=%r, device=%r)",
+            camera_provider, camera_index, camera_device,
+        )
 
     return mcp
 
@@ -170,7 +175,8 @@ async def run_node_mcp_server(
     host: str = "127.0.0.1",
     camera_enabled: bool = False,
     camera_provider: str = "opencv",
-    camera_index: int = 0,
+    camera_index: int | None = None,
+    camera_device: str | None = None,
     camera_width: int = 1280,
     camera_height: int = 720,
 ) -> None:
@@ -184,6 +190,7 @@ async def run_node_mcp_server(
         camera_enabled=camera_enabled,
         camera_provider=camera_provider,
         camera_index=camera_index,
+        camera_device=camera_device,
         camera_width=camera_width,
         camera_height=camera_height,
     )

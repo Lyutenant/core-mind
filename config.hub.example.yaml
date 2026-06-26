@@ -125,6 +125,8 @@ remote_brain:
 #     as a standalone all-in-one assistant.
 
 audio:
+  # null = auto-select by stable name (only relevant in standalone mode; unused when the
+  # Hub serves remote Nodes, which do their own audio I/O).
   input_device: null
   output_device: null
   sample_rate: 16000

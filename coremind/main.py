@@ -110,14 +110,15 @@ def audio_list_devices() -> None:
 def audio_record_test(
     seconds: int = typer.Option(5, "--seconds", "-s", help="Recording duration in seconds."),
     output: str = typer.Option("test.wav", "--output", "-o", help="Output WAV file path."),
-    device: Optional[int] = typer.Option(None, "--device", "-d", help="Input device index (see list-devices)."),
+    device: Optional[str] = typer.Option(None, "--device", "-d", help="Input device index or name substring (see list-devices). Default: auto-select."),
 ) -> None:
     """Record a short WAV file from the microphone."""
+    from coremind.audio_input.devices import coerce_device, resolve_input_device
     from coremind.audio_input.recorder import Recorder
     from coremind import AudioInputError
 
     cfg = _get_settings().audio
-    dev = device if device is not None else cfg.input_device
+    dev = coerce_device(device) if device is not None else resolve_input_device(cfg.input_device)
 
     console.print(f"Recording [bold]{seconds}s[/bold] → [cyan]{output}[/cyan]  (device: {dev if dev is not None else 'default'})")
     console.print("🎙  Speak now...", highlight=False)
@@ -134,14 +135,15 @@ def audio_record_test(
 @audio_app.command("play-test")
 def audio_play_test(
     file: str = typer.Option(..., "--file", "-f", help="WAV file to play."),
-    device: Optional[int] = typer.Option(None, "--device", "-d", help="Output device index (see list-devices)."),
+    device: Optional[str] = typer.Option(None, "--device", "-d", help="Output device index or name substring (see list-devices). Default: auto-select."),
 ) -> None:
     """Play a WAV file through the speaker."""
+    from coremind.audio_input.devices import coerce_device, resolve_output_device
     from coremind.audio_output.player import Player
     from coremind import AudioOutputError
 
     cfg = _get_settings().audio
-    dev = device if device is not None else cfg.output_device
+    dev = coerce_device(device) if device is not None else resolve_output_device(cfg.output_device)
 
     console.print(f"Playing [cyan]{file}[/cyan]  (device: {dev if dev is not None else 'default'})")
 
@@ -161,19 +163,24 @@ def audio_play_test(
 @vision_app.command("test")
 def vision_test(
     output: str = typer.Option("frame.jpg", "--output", "-o", help="Output JPEG file path."),
-    device: Optional[int] = typer.Option(None, "--device", "-d", help="Camera index (default: vision.camera_index)."),
+    device: Optional[str] = typer.Option(None, "--device", "-d", help="Camera index or /dev path. Default: auto-select (vision.camera_device / camera_index)."),
 ) -> None:
     """Capture one frame from the camera and save it. Run this on the Node (Pi) to test the webcam."""
     from coremind import VisionError
+    from coremind.vision.camera_select import resolve_camera_source
     from coremind.vision.opencv_camera import OpenCVCamera
 
     cfg = _get_settings().vision
-    idx = device if device is not None else cfg.camera_index
+    if device is not None:
+        source = int(device) if device.strip().isdigit() else device
+    else:
+        source = resolve_camera_source(cfg.camera_device, cfg.camera_index)
 
-    console.print(f"Capturing from camera [bold]{idx}[/bold] → [cyan]{output}[/cyan]")
+    console.print(f"Capturing from camera [bold]{source!r}[/bold] → [cyan]{output}[/cyan]")
     try:
         cam = OpenCVCamera(
-            camera_index=idx,
+            camera_index=source if isinstance(source, int) else 0,
+            camera_device=source if isinstance(source, str) else None,
             width=cfg.resolution_width,
             height=cfg.resolution_height,
         )
@@ -209,10 +216,13 @@ def vision_describe(
         if image:
             jpeg = Path(image).read_bytes()
         else:
+            from coremind.vision.camera_select import resolve_camera_source
             from coremind.vision.opencv_camera import OpenCVCamera
             console.print("[dim]No --image given — capturing from the local camera…[/dim]")
+            source = resolve_camera_source(s.vision.camera_device, s.vision.camera_index)
             cam = OpenCVCamera(
-                camera_index=s.vision.camera_index,
+                camera_index=source if isinstance(source, int) else 0,
+                camera_device=source if isinstance(source, str) else None,
                 width=s.vision.resolution_width,
                 height=s.vision.resolution_height,
             )
@@ -254,13 +264,18 @@ def _build_voice_loop(
     on_turn_complete=None,
 ):
     from coremind import ConfigError, STTError, TTSError, WakeWordError
+    from coremind.audio_input.devices import resolve_input_device, resolve_output_device
     from coremind.audio_input.recorder import Recorder
     from coremind.audio_output.player import Player
     from coremind.voice_loop import VoiceLoop
 
     acfg = settings.audio
+    # Resolve once (auto-selecting by stable name when unset) so the recorder,
+    # player, wake-word detector, and chime all share the same physical devices.
+    input_device = resolve_input_device(acfg.input_device)
+    output_device = resolve_output_device(acfg.output_device)
     recorder = Recorder(
-        device=acfg.input_device,
+        device=input_device,
         sample_rate=acfg.sample_rate,
         channels=acfg.channels,
     )
@@ -284,7 +299,7 @@ def _build_voice_loop(
         brain = None
         memory = None
         tts = None
-        player = Player(device=acfg.output_device)
+        player = Player(device=output_device)
     else:
         from coremind.brain.ollama_client import MockBrainClient, OllamaClient
         from coremind.brain.router import BrainRouter
@@ -350,13 +365,13 @@ def _build_voice_loop(
             else:
                 try:
                     tts = PiperLocalTTS(model_path=model_path)
-                    player = Player(device=acfg.output_device)
+                    player = Player(device=output_device)
                 except TTSError as e:
                     console.print(f"[yellow]TTS disabled:[/yellow] {e}")
         elif tts_provider == "espeak":
             from coremind.tts.piper_local import EspeakTTS
             tts = EspeakTTS(voice=settings.tts.voice or "en")
-            player = Player(device=acfg.output_device)
+            player = Player(device=output_device)
         elif tts_provider == "mock":
             from coremind.tts.piper_local import MockTTS
             tts = MockTTS()
@@ -392,7 +407,7 @@ def _build_voice_loop(
                 wake_word = OpenWakeWordDetector(
                     model=wwcfg.model,
                     threshold=wwcfg.threshold,
-                    device=acfg.input_device,
+                    device=input_device,
                     sample_rate=16000,  # openwakeword always requires 16 kHz
                     inference_framework=wwcfg.inference_framework,
                     vad_threshold=wwcfg.vad_threshold,
@@ -575,6 +590,7 @@ def run() -> None:
                     camera_enabled=settings.vision.enabled,
                     camera_provider=settings.vision.provider,
                     camera_index=settings.vision.camera_index,
+                    camera_device=settings.vision.camera_device,
                     camera_width=settings.vision.resolution_width,
                     camera_height=settings.vision.resolution_height,
                 )
@@ -752,10 +768,12 @@ def doctor_cmd() -> None:
 
     # 3. Audio input
     try:
-        from coremind.audio_input.devices import list_input_devices
+        from coremind.audio_input.devices import list_input_devices, resolve_input_device
         devs = list_input_devices()
         if devs:
-            checks.append(Check("Audio input", "ok", f"{len(devs)} device(s) found"))
+            chosen = resolve_input_device(settings.audio.input_device)
+            label = f"using {chosen!r}" if chosen is not None else "using system default"
+            checks.append(Check("Audio input", "ok", f"{len(devs)} device(s) found — {label}"))
         else:
             checks.append(Check("Audio input", "warn", "No input devices found",
                                 "Check microphone. Run 'coremind audio list-devices'."))
@@ -765,10 +783,12 @@ def doctor_cmd() -> None:
 
     # 4. Audio output
     try:
-        from coremind.audio_input.devices import list_output_devices
+        from coremind.audio_input.devices import list_output_devices, resolve_output_device
         devs = list_output_devices()
         if devs:
-            checks.append(Check("Audio output", "ok", f"{len(devs)} device(s) found"))
+            chosen = resolve_output_device(settings.audio.output_device)
+            label = f"using {chosen!r}" if chosen is not None else "using system default"
+            checks.append(Check("Audio output", "ok", f"{len(devs)} device(s) found — {label}"))
         else:
             checks.append(Check("Audio output", "warn", "No output devices found",
                                 "Check speaker. Run 'coremind audio list-devices'."))

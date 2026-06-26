@@ -5,7 +5,7 @@ import queue
 import threading
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Union
 
 from coremind import AudioInputError
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class Recorder:
     def __init__(
         self,
-        device: Optional[int] = None,
+        device: Optional[Union[int, str]] = None,
         sample_rate: int = 16000,
         channels: int = 1,
     ) -> None:

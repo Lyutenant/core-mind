@@ -97,12 +97,25 @@ This is usually the channel matcher, not a streaming problem (see [Tools — cha
 ## Audio device problems
 
 ```bash
-coremind audio list-devices     # see available device indexes
+coremind audio list-devices     # see available devices (Index + Name columns)
 coremind audio record-test -s 5 -o test.wav
 coremind audio play-test -f test.wav
+coremind doctor                 # shows which mic/speaker were auto-selected
 ```
 
-If recording works but playback fails with a sample rate error, the speaker may require resampling. CoreMind auto-resamples; if the issue persists, try specifying the output device index explicitly in `config.yaml`.
+**Auto-selection picked the wrong device.** With `input_device`/`output_device` set to `null`,
+CoreMind auto-selects by stable name (preferring USB) and remembers the choice in
+`~/.coremind/device-cache.json`. If it grabs the wrong one — common when a USB **webcam** also
+exposes a mic, or you have two identical USB audio products — pin the right device by setting a
+Name substring (or Index) from `list-devices` in `config.yaml`, e.g. `input_device: "USB Audio CODEC"`.
+You can also delete `~/.coremind/device-cache.json` to force a fresh scan.
+
+**Selection changed after adding a USB hub / reboot.** Name-based selection is designed to
+survive USB re-enumeration. If you'd previously pinned a numeric **index**, switch it to a Name
+substring (mic/speaker) or a `/dev/v4l/by-id/...` path (camera) so it stops depending on
+enumeration order.
+
+If recording works but playback fails with a sample rate error, the speaker may require resampling. CoreMind auto-resamples; if the issue persists, try pinning the output device explicitly in `config.yaml`.
 
 ---
 
@@ -120,7 +133,10 @@ The camera lives on the **Node (Pi)**; the vision model runs on the **Hub (Mac)*
 
 - **On the Pi:** `coremind vision test -o frame.jpg`.
   - `opencv is not installed` → `pip install 'coremind[vision]'`.
-  - `Could not open camera index N` → wrong index. Try `--device 1` (or 2…); confirm the USB webcam is detected (`ls /dev/video*`).
+  - `Could not open camera ...` → wrong camera. By default it auto-selects a `/dev/v4l/by-id/...`
+    path; to pin one, run `ls -l /dev/v4l/by-id/` and pass `--device /dev/v4l/by-id/<name>` (or a
+    numeric index like `--device 1`). Confirm the webcam is detected with `ls /dev/video*`. Delete
+    `~/.coremind/device-cache.json` to force a fresh scan.
 - **On the Mac:** `coremind vision describe --image frame.jpg`.
   - `ollama.vision_model is not set` → set it in the Hub `config.yaml` (e.g. `llava:7b`).
   - Model errors / not found → `ollama pull llava:7b` (or `moondream` if low on RAM).

@@ -1035,13 +1035,14 @@
             <div class="form-section-title">Audio Devices</div>
             <div class="form-grid">
               <div class="field">
-                <label>Input Device Index</label>
-                <input type="number" id="audio.input_device" min="0" step="1" placeholder="null (system default)">
-                <span class="hint">Run 'coremind audio list-devices' on this device to find the index.</span>
+                <label>Input Device</label>
+                <input type="text" id="audio.input_device" placeholder="auto-select by name">
+                <span class="hint">Leave blank to auto-select by stable name. Or pin an index or name substring from 'coremind audio list-devices' (e.g. USB Audio CODEC) — names survive a USB hub move.</span>
               </div>
               <div class="field">
-                <label>Output Device Index</label>
-                <input type="number" id="audio.output_device" min="0" step="1" placeholder="null (system default)">
+                <label>Output Device</label>
+                <input type="text" id="audio.output_device" placeholder="auto-select by name">
+                <span class="hint">Blank = auto-select; or an index / name substring.</span>
               </div>
               <div class="field">
                 <label>Sample Rate (Hz)</label>
@@ -1639,6 +1640,12 @@ function buildConfig() {
     if (isNaN(num)) throw new Error(`${id}: expected a number`);
     return num;
   };
+  // Audio device: blank → null (auto), all-digits → index number, otherwise a name substring.
+  const dev = (id) => {
+    const v = g(id, true);
+    if (v === null) return null;
+    return /^\d+$/.test(v) ? Number(v) : v;
+  };
   let options = {};
   const optVal = (document.getElementById('ollama.options') || {}).value || '';
   if (optVal.trim()) {
@@ -1653,8 +1660,8 @@ function buildConfig() {
     app:    { name: g('app.name'), log_level: g('app.log_level'), personality: g('app.personality') },
     runtime: { mode: 'push_to_talk', require_confirmation_for_actions: true },
     audio: {
-      input_device:   n('audio.input_device', true),
-      output_device:  n('audio.output_device', true),
+      input_device:   dev('audio.input_device'),
+      output_device:  dev('audio.output_device'),
       sample_rate:    n('audio.sample_rate'),
       channels:       n('audio.channels'),
       record_seconds: n('audio.record_seconds'),

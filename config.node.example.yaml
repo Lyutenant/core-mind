@@ -29,11 +29,20 @@ runtime:
   wake_confirm_words: ["over", "go ahead", "confirm"]
 
 audio:
-  # Run `coremind audio list-devices` to find device indexes.
-  # Set to the Index number shown in that table, or leave null for the system default.
-  # Example — USB mic at index 0, USB speaker at index 1:
-  #   input_device: 0
-  #   output_device: 1
+  # Leave null (recommended) to AUTO-SELECT the mic/speaker by stable name. CoreMind
+  # scans the available devices, prefers a USB audio device, pins it by name, and
+  # remembers the choice in ~/.coremind/device-cache.json. Because it matches by name
+  # (not enumeration index), the same physical device keeps being used even after you
+  # move everything onto a powered USB hub or reboot. The pick is logged at startup
+  # ("Auto-selected microphone: '...'"); `coremind doctor` also shows it.
+  #
+  # To pin a specific device, set either an Index number or a Name substring from
+  # `coremind audio list-devices` (the Name column is the matchable text):
+  #   input_device: 1                 # PortAudio index
+  #   input_device: "USB Audio CODEC" # case-insensitive name substring (hub-safe)
+  #   output_device: "USB Speaker"
+  # Note: two *identical* USB audio products share a name — pin one explicitly to
+  # disambiguate if auto picks the wrong one.
   input_device: null
   output_device: null
   # Use the sample rate your microphone reports in list-devices (e.g. 44100).
@@ -147,6 +156,12 @@ node_mcp:
 vision:
   enabled: false        # set true once a USB webcam is plugged in
   provider: opencv      # opencv (USB webcam) or mock (for testing)
-  camera_index: 0       # 0 = first camera; try 1, 2… if you have several
+  # Leave both null (recommended) to AUTO-SELECT a camera by its stable /dev/v4l/by-id
+  # path — survives a USB hub move/reboot, unlike /dev/videoN numbering. The pick is
+  # logged and cached in ~/.coremind/device-cache.json. To pin a specific camera:
+  #   camera_device: "/dev/v4l/by-id/usb-Foo_Webcam-video-index0"   # stable path (preferred)
+  #   camera_index: 1                                               # or an enumeration index
+  camera_index: null
+  camera_device: null
   resolution_width: 1280
   resolution_height: 720

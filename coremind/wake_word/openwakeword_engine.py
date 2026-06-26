@@ -17,7 +17,7 @@ class OpenWakeWordDetector(WakeWordDetector):
         self,
         model: str = "hey_jarvis_v0.1",
         threshold: float = 0.5,
-        device: int | None = None,
+        device: int | str | None = None,
         sample_rate: int = 16000,
         inference_framework: str = "onnx",
         vad_threshold: float = 0.0,
