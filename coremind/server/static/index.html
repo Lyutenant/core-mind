@@ -608,6 +608,10 @@
     /* ── Bottom nav (mobile only) ── */
     .bottom-nav { display: none; }
 
+    /* ── Stats drawer (mobile only — desktop keeps the panel as a static column) ── */
+    .stats-toggle { display: none; }
+    .stats-backdrop { display: none; }
+
     /* ── Mobile ── */
     @media (max-width: 768px) {
       html, body { font-size: 15px; overflow: hidden; }
@@ -618,7 +622,22 @@
       }
       .sidebar { display: none; }
       .main { height: calc(100dvh - 60px); }
-      .stats-panel { display: none; }
+      .stats-toggle { display: inline-flex; }
+      .stats-panel {
+        position: fixed; top: 0; right: 0; bottom: 0;
+        width: min(300px, 85vw);
+        z-index: 200;
+        transform: translateX(100%);
+        transition: transform .2s ease;
+        box-shadow: -8px 0 24px rgba(0,0,0,.4);
+      }
+      .stats-panel.open { transform: translateX(0); }
+      .stats-backdrop.open {
+        display: block;
+        position: fixed; inset: 0;
+        z-index: 150;
+        background: rgba(0,0,0,.5);
+      }
       .bottom-nav {
         display: flex;
         position: fixed; bottom: 0; left: 0; right: 0;
@@ -709,6 +728,8 @@
       </div>
       <div class="topbar-right">
         <span class="pill" id="pill-status">Idle</span>
+        <button class="btn stats-toggle" id="stats-toggle" onclick="toggleStatsDrawer()"
+                title="Session / Model / Camera / Actions">📊</button>
         <button class="btn" onclick="refreshHealth()">↻ Refresh</button>
       </div>
     </div>
@@ -737,7 +758,7 @@
           <span id="status-text">Idle</span>
         </div>
       </div>
-      <div class="stats-panel">
+      <div class="stats-panel" id="stats-panel">
         <div class="stat-section">
           <div class="stat-title">Session</div>
           <div class="stat-item">
@@ -1254,6 +1275,9 @@
     </button>
   </nav>
 
+  <!-- Stats drawer backdrop (mobile only) -->
+  <div class="stats-backdrop" id="stats-backdrop" onclick="toggleStatsDrawer(false)"></div>
+
 </div><!-- /.layout -->
 
 <div class="toast-container" id="toasts"></div>
@@ -1299,9 +1323,23 @@ function switchView(name) {
   const titleMap = { dashboard: 'Dashboard', nodes: 'Nodes', tools: 'Tools', settings: modeLabel + ' Settings' };
   document.getElementById('topbar-title').textContent = titleMap[name] || name;
   currentView = name;
+  // The stats drawer belongs to the dashboard only: close it on any view switch and
+  // gate the toggle to the dashboard (CSS still hides it on desktop).
+  toggleStatsDrawer(false);
+  document.getElementById('stats-toggle').style.display = (name === 'dashboard') ? '' : 'none';
   if (name === 'settings') loadConfig();
   if (name === 'nodes') loadNodes();
   if (name === 'tools') loadTools();
+}
+
+// ── Stats drawer (mobile) ────────────────────────────────────────────────────
+// force === false always closes (backdrop tap, view switch); otherwise toggle.
+function toggleStatsDrawer(force) {
+  const panel = document.getElementById('stats-panel');
+  const backdrop = document.getElementById('stats-backdrop');
+  const open = (force === undefined) ? !panel.classList.contains('open') : force;
+  panel.classList.toggle('open', open);
+  backdrop.classList.toggle('open', open);
 }
 
 // ── Tab switching ───────────────────────────────────────────────────────────
