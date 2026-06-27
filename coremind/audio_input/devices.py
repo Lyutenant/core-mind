@@ -12,6 +12,11 @@ logger = logging.getLogger(__name__)
 # exposes an audio capture endpoint, which is rarely the mic the user wants.
 _WEBCAM_NAME_TOKENS = ("cam", "camera", "webcam")
 
+# Names that should never be auto-picked as the speaker: a USB microphone or
+# mic array (e.g. the reSpeaker) often also exposes a playback endpoint, which
+# is not the speaker the user wants — sending the chime/TTS there is silent.
+_NON_SPEAKER_NAME_TOKENS = ("mic array", "4-mic", "microphone")
+
 
 @dataclass
 class AudioDevice:
@@ -104,26 +109,34 @@ def _name_present(name: str, devices: list[AudioDevice]) -> bool:
     return any(needle in d.name.lower() for d in devices)
 
 
+def _has_token(name: str, tokens: tuple[str, ...]) -> bool:
+    n = name.lower()
+    return any(t in n for t in tokens)
+
+
 def _auto_select_name(
     devices: list[AudioDevice],
     cached: Optional[str],
     default: Optional[AudioDevice],
-    avoid_webcam: bool,
+    avoid_tokens: tuple[str, ...],
 ) -> Optional[str]:
     if not devices:
         return None
-    if cached and _name_present(cached, devices):
+    # Reuse a cached pick only if it's still present *and* isn't a device the
+    # heuristic would now reject — so a stale cache pointing at a webcam/mic-array
+    # (e.g. written before this avoidance existed) self-heals on the next boot.
+    if cached and _name_present(cached, devices) and not _has_token(cached, avoid_tokens):
         return cached
     usb = [d for d in devices if "usb" in d.name.lower()]
-    if avoid_webcam:
-        preferred = [
-            d for d in usb
-            if not any(t in d.name.lower() for t in _WEBCAM_NAME_TOKENS)
-        ]
-        if preferred:
-            return preferred[0].name
+    preferred = [d for d in usb if not _has_token(d.name, avoid_tokens)]
+    if preferred:
+        return preferred[0].name
+    # No acceptable USB device — prefer a real default speaker over a rejected USB
+    # endpoint (e.g. a mic array's silent playback output).
+    if default is not None and not _has_token(default.name, avoid_tokens):
+        return default.name
     if usb:
-        return usb[0].name
+        return usb[0].name      # last resort: a rejected USB device beats nothing
     if default is not None:
         return default.name
     return devices[0].name
@@ -135,7 +148,7 @@ def auto_select_input_name() -> Optional[str]:
         list_input_devices(),
         device_cache.get(device_cache.INPUT_KEY),
         get_default_input_device(),
-        avoid_webcam=True,
+        avoid_tokens=_WEBCAM_NAME_TOKENS,
     )
 
 
@@ -145,7 +158,7 @@ def auto_select_output_name() -> Optional[str]:
         list_output_devices(),
         device_cache.get(device_cache.OUTPUT_KEY),
         get_default_output_device(),
-        avoid_webcam=False,
+        avoid_tokens=_NON_SPEAKER_NAME_TOKENS,
     )
 
 

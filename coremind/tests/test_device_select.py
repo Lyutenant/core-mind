@@ -85,6 +85,51 @@ def test_auto_output_prefers_usb(mocker, no_cache):
     assert auto_select_output_name() == "USB Speaker"
 
 
+def test_auto_output_skips_mic_array(mocker, no_cache):
+    # A USB mic array (reSpeaker) also exposes a playback endpoint that comes
+    # first in enumeration; the real USB speaker should win, not the mic array.
+    mocker.patch.object(dev, "list_output_devices", return_value=[
+        _spk("reSpeaker XVF3800 4-Mic Array: USB Audio (hw:2,0)"),
+        _spk("USB2.0 Device: Audio (hw:3,0)"),
+    ])
+    mocker.patch.object(dev, "get_default_output_device", return_value=None)
+    assert auto_select_output_name() == "USB2.0 Device: Audio (hw:3,0)"
+
+
+def test_auto_output_uses_mic_array_only_when_sole_usb(mocker, no_cache):
+    # If the mic array is the *only* USB output, fall back to it rather than None.
+    mocker.patch.object(dev, "list_output_devices", return_value=[
+        _spk("reSpeaker XVF3800 4-Mic Array: USB Audio (hw:2,0)"),
+    ])
+    mocker.patch.object(dev, "get_default_output_device", return_value=None)
+    assert auto_select_output_name() == "reSpeaker XVF3800 4-Mic Array: USB Audio (hw:2,0)"
+
+
+def test_auto_output_prefers_default_over_rejected_usb(mocker, no_cache):
+    # The only USB output is a mic array, but a normal default speaker exists →
+    # the default should win, not the silent mic-array endpoint.
+    mocker.patch.object(dev, "list_output_devices", return_value=[
+        _spk("reSpeaker XVF3800 4-Mic Array: USB Audio (hw:2,0)"),
+        _spk("Built-in Output"),
+    ])
+    mocker.patch.object(dev, "get_default_output_device",
+                        return_value=_spk("Built-in Output"))
+    assert auto_select_output_name() == "Built-in Output"
+
+
+def test_auto_output_self_heals_stale_mic_array_cache(mocker):
+    # A cache written before mic-array avoidance existed points at the reSpeaker;
+    # it should be ignored in favour of the real speaker (no manual cache wipe).
+    mocker.patch.object(device_cache, "get", return_value="reSpeaker XVF3800 4-Mic Array")
+    mocker.patch.object(device_cache, "remember")
+    mocker.patch.object(dev, "list_output_devices", return_value=[
+        _spk("reSpeaker XVF3800 4-Mic Array: USB Audio (hw:2,0)"),
+        _spk("USB2.0 Device: Audio (hw:3,0)"),
+    ])
+    mocker.patch.object(dev, "get_default_output_device", return_value=None)
+    assert auto_select_output_name() == "USB2.0 Device: Audio (hw:3,0)"
+
+
 def test_auto_input_uses_cache_when_present(mocker):
     mocker.patch.object(device_cache, "get", return_value="Scarlett")
     mocker.patch.object(dev, "list_input_devices", return_value=[_mic("Focusrite Scarlett 2i2"), _mic("USB PnP Sound Device")])
