@@ -145,14 +145,6 @@ def _delete_session_file(session_id: str) -> None:
         logger.warning("Could not delete session file %s: %s", session_id, exc)
 
 
-def _save_sessions() -> None:
-    """Persist every session file + the index. Used at migration and as a full flush;
-    hot paths write only the session(s) they touched plus the index."""
-    for sess in _sessions_registry.values():
-        _save_session_file(sess)
-    _save_index()
-
-
 def _migrate_legacy_sessions() -> bool:
     """One-time migration of a single-file sessions.json into per-session files.
 
