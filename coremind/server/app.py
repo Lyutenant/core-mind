@@ -4,6 +4,7 @@ import asyncio
 import datetime
 import json
 import logging
+import os
 import tempfile
 import urllib.parse
 import uuid
@@ -24,8 +25,9 @@ _stt = None
 _tts = None
 _brain = None
 _dispatcher = None
-_sessions: dict = {}
-_conversation_log: list[dict] = []
+_sessions: dict = {}                    # session_id → live SessionMemory (LLM context cache)
+_sessions_registry: dict[str, dict] = {}   # session_id → Session (durable rounds, persisted)
+_active_session_id: str | None = None   # the one session new voice/chat turns land in
 _event_listeners: list[asyncio.Queue] = []
 _turn_count: int = 0
 _node_registry: dict[str, dict] = {}   # node_id → {name, hostname, online, last_seen, config_overrides}
@@ -55,6 +57,213 @@ def _save_node_overrides(data: dict) -> None:
 
 
 _persisted_overrides: dict = _load_node_overrides()
+
+# ---------------------------------------------------------------------------
+# Sessions  (~/.coremind/sessions/ on the Hub)
+#
+# A Session groups a conversation's rounds under a hash id. The server keeps many
+# sessions and marks exactly one *active* (new voice/chat turns land there); each
+# dashboard device chooses which session it *views*. Persisted across restarts so
+# the conversation history survives a Hub restart and stays shared across devices.
+#
+# Storage layout: one JSON file per session (`<id>.json`, full rounds) plus a
+# lightweight `index.json` (active pointer + per-session metadata, no rounds). A
+# turn therefore rewrites only its own session file + the tiny index, not the whole
+# history. A legacy single-file `sessions.json` is auto-migrated on first load.
+# ---------------------------------------------------------------------------
+
+_SESSIONS_DIR = Path.home() / ".coremind" / "sessions"
+_INDEX_PATH = _SESSIONS_DIR / "index.json"
+_OLD_SESSIONS_PATH = Path.home() / ".coremind" / "sessions.json"
+_MAX_SESSIONS = 50
+_MAX_ROUNDS = 200
+
+
+def _new_session() -> dict:
+    now = datetime.datetime.now().isoformat()
+    return {
+        "id": uuid.uuid4().hex,
+        "title": "New session",
+        "created_at": now,
+        "updated_at": now,
+        "rounds": [],
+    }
+
+
+def _most_recent_session_id() -> str:
+    return max(_sessions_registry.values(), key=lambda s: s.get("updated_at", ""))["id"]
+
+
+def _session_path(session_id: str) -> Path:
+    return _SESSIONS_DIR / f"{session_id}.json"
+
+
+def _atomic_write_json(path: Path, payload: dict) -> None:
+    """Write JSON atomically (tempfile + os.replace) so a crash can't corrupt it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = json.dumps(payload, indent=2)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def _save_index() -> None:
+    """Persist the index: active pointer + per-session metadata (no rounds)."""
+    try:
+        meta = {
+            sid: {
+                "id": s["id"],
+                "title": s.get("title", "New session"),
+                "created_at": s.get("created_at", ""),
+                "updated_at": s.get("updated_at", ""),
+                "round_count": len(s.get("rounds", [])),
+            }
+            for sid, s in _sessions_registry.items()
+        }
+        _atomic_write_json(_INDEX_PATH, {"active": _active_session_id, "sessions": meta})
+    except Exception as exc:
+        logger.warning("Could not save session index: %s", exc)
+
+
+def _save_session_file(sess: dict) -> None:
+    """Persist a single session's full record (`<id>.json`)."""
+    try:
+        _atomic_write_json(_session_path(sess["id"]), sess)
+    except Exception as exc:
+        logger.warning("Could not save session %s: %s", sess.get("id"), exc)
+
+
+def _delete_session_file(session_id: str) -> None:
+    try:
+        _session_path(session_id).unlink(missing_ok=True)
+    except Exception as exc:
+        logger.warning("Could not delete session file %s: %s", session_id, exc)
+
+
+def _migrate_legacy_sessions() -> bool:
+    """One-time migration of a single-file sessions.json into per-session files.
+
+    Returns True if a migration was performed. Renames the old file to .bak rather
+    than deleting it, as a safety net.
+    """
+    if _INDEX_PATH.exists() or not _OLD_SESSIONS_PATH.exists():
+        return False
+    global _sessions_registry, _active_session_id
+    try:
+        data = json.loads(_OLD_SESSIONS_PATH.read_text())
+    except Exception as exc:
+        logger.warning("Could not read legacy sessions.json for migration: %s", exc)
+        return False
+    sessions = data.get("sessions")
+    if isinstance(sessions, dict):
+        _sessions_registry = sessions
+    _active_session_id = data.get("active")
+    # Session files first, then the index — the index never references a missing file.
+    for sess in _sessions_registry.values():
+        _save_session_file(sess)
+    _save_index()
+    try:
+        _OLD_SESSIONS_PATH.replace(_OLD_SESSIONS_PATH.with_suffix(".json.bak"))
+    except Exception as exc:
+        logger.warning("Migrated sessions but could not rename legacy file: %s", exc)
+    logger.info("Migrated %d session(s) to %s", len(_sessions_registry), _SESSIONS_DIR)
+    return True
+
+
+def _load_sessions() -> None:
+    global _sessions_registry, _active_session_id
+    try:
+        if not _migrate_legacy_sessions() and _INDEX_PATH.exists():
+            index = json.loads(_INDEX_PATH.read_text())
+            _active_session_id = index.get("active")
+            registry: dict[str, dict] = {}
+            for sid in (index.get("sessions") or {}):
+                path = _session_path(sid)
+                try:
+                    registry[sid] = json.loads(path.read_text())
+                except Exception as exc:
+                    # Tolerate an indexed session whose file is missing/corrupt.
+                    logger.warning("Skipping unreadable session %s: %s", sid, exc)
+            _sessions_registry = registry
+    except Exception as exc:
+        logger.warning("Could not load sessions: %s", exc)
+    # Enforce invariants: a non-empty registry with a valid active pointer.
+    if not _sessions_registry:
+        s = _new_session()
+        _sessions_registry[s["id"]] = s
+        _active_session_id = s["id"]
+        _save_session_file(s)
+        _save_index()
+    elif _active_session_id not in _sessions_registry:
+        _active_session_id = _most_recent_session_id()
+        _save_index()
+
+
+def _prune_sessions() -> None:
+    """Keep the most-recently-updated _MAX_SESSIONS (never drop the active one)."""
+    if len(_sessions_registry) <= _MAX_SESSIONS:
+        return
+    ordered = sorted(
+        _sessions_registry.values(), key=lambda s: s.get("updated_at", ""), reverse=True
+    )
+    keep = {s["id"] for s in ordered[:_MAX_SESSIONS]}
+    keep.add(_active_session_id)
+    for sid in list(_sessions_registry.keys()):
+        if sid not in keep:
+            del _sessions_registry[sid]
+            _sessions.pop(sid, None)
+            _delete_session_file(sid)
+    _save_index()
+
+
+def _get_active_session() -> dict:
+    """Return the active session, repairing the pointer / creating one if needed."""
+    global _active_session_id
+    if _active_session_id not in _sessions_registry:
+        if _sessions_registry:
+            _active_session_id = _most_recent_session_id()
+        else:
+            s = _new_session()
+            _sessions_registry[s["id"]] = s
+            _active_session_id = s["id"]
+    return _sessions_registry[_active_session_id]
+
+
+def _set_active(session_id: str) -> dict:
+    """Make a session active and broadcast it (so follow-mode devices switch)."""
+    global _active_session_id
+    sess = _sessions_registry.get(session_id) or _get_active_session()
+    _active_session_id = sess["id"]
+    _save_index()  # only the active pointer changed; no rounds touched
+    _broadcast(
+        {"type": "session_activated", "session_id": sess["id"], "title": sess["title"]}
+    )
+    return sess
+
+
+def _append_round(session_id: str, turn: dict) -> None:
+    """Append a completed turn to a session, trim, title, persist."""
+    sess = _sessions_registry.get(session_id) or _get_active_session()
+    sess["rounds"].append(turn)
+    if len(sess["rounds"]) > _MAX_ROUNDS:
+        sess["rounds"] = sess["rounds"][-_MAX_ROUNDS:]
+    if sess.get("title", "New session") == "New session":
+        first = (turn.get("transcript") or "").strip()
+        if first:
+            sess["title"] = first[:60]
+    sess["updated_at"] = datetime.datetime.now().isoformat()
+    # Session file first, then the index (index never references a missing file).
+    _save_session_file(sess)
+    _save_index()
+
+
+_load_sessions()
+
 
 def _build_system_prompt(s) -> str:
     parts = [
@@ -199,7 +408,17 @@ def _reset_singletons() -> None:
 def _get_session(session_id: str):
     from coremind.memory.session_memory import SessionMemory
     if session_id not in _sessions:
-        _sessions[session_id] = SessionMemory(max_turns=_get_settings().memory.max_turns)
+        mem = SessionMemory(max_turns=_get_settings().memory.max_turns)
+        # Seed the live context from the session's persisted rounds so a
+        # restart-resumed (or device-switched) conversation keeps its memory.
+        sess = _sessions_registry.get(session_id)
+        if sess:
+            for rnd in sess["rounds"][-mem.max_turns:]:
+                if rnd.get("transcript"):
+                    mem.add("user", rnd["transcript"])
+                if rnd.get("response"):
+                    mem.add("assistant", rnd["response"])
+        _sessions[session_id] = mem
     return _sessions[session_id]
 
 
@@ -575,14 +794,97 @@ try:
 
     @app.get("/api/conversation")
     async def get_conversation():
-        return _conversation_log
+        # Back-compat: the active session's rounds.
+        return _get_active_session()["rounds"]
 
     @app.delete("/api/conversation")
     async def clear_conversation():
-        _conversation_log.clear()
-        _sessions.clear()
-        _broadcast({"type": "conversation_cleared"})
+        # "Clear" empties the active session (and its live memory); next turn re-titles.
+        sess = _get_active_session()
+        sess["rounds"] = []
+        sess["title"] = "New session"
+        sess["updated_at"] = datetime.datetime.now().isoformat()
+        _sessions.pop(sess["id"], None)
+        _save_session_file(sess)
+        _save_index()
+        _broadcast({"type": "conversation_cleared", "session_id": sess["id"]})
+        _broadcast({"type": "session_list_changed"})
         return {"status": "cleared"}
+
+    # -----------------------------------------------------------------------
+    # Sessions (cross-device conversation sync)
+    # -----------------------------------------------------------------------
+
+    @app.get("/api/sessions")
+    async def list_sessions():
+        _get_active_session()  # guarantee a valid active session for first load
+        items = [
+            {
+                "id": s["id"],
+                "title": s["title"],
+                "created_at": s["created_at"],
+                "updated_at": s["updated_at"],
+                "round_count": len(s["rounds"]),
+                "active": s["id"] == _active_session_id,
+            }
+            for s in sorted(
+                _sessions_registry.values(),
+                key=lambda s: s.get("updated_at", ""),
+                reverse=True,
+            )
+        ]
+        return {"active": _active_session_id, "sessions": items}
+
+    @app.post("/api/sessions")
+    async def create_session():
+        global _active_session_id
+        sess = _new_session()
+        _sessions_registry[sess["id"]] = sess
+        _active_session_id = sess["id"]
+        _save_session_file(sess)
+        _prune_sessions()  # writes the index (and drops overflow files) when it runs
+        _save_index()      # ensure the index reflects the new active session
+        _broadcast(
+            {"type": "session_activated", "session_id": sess["id"], "title": sess["title"]}
+        )
+        _broadcast({"type": "session_list_changed"})
+        return sess
+
+    @app.get("/api/sessions/{session_id}")
+    async def get_session(session_id: str):
+        sess = _sessions_registry.get(session_id)
+        if sess is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        return sess
+
+    @app.post("/api/sessions/{session_id}/activate")
+    async def activate_session(session_id: str):
+        if session_id not in _sessions_registry:
+            raise HTTPException(status_code=404, detail="session not found")
+        sess = _set_active(session_id)
+        return {"status": "activated", "active": sess["id"]}
+
+    @app.delete("/api/sessions/{session_id}")
+    async def delete_session(session_id: str):
+        global _active_session_id
+        if session_id not in _sessions_registry:
+            raise HTTPException(status_code=404, detail="session not found")
+        del _sessions_registry[session_id]
+        _sessions.pop(session_id, None)
+        _delete_session_file(session_id)
+        active_changed = _active_session_id == session_id
+        if active_changed:
+            _active_session_id = None
+            _get_active_session()  # pick a survivor or create a fresh one
+            _save_session_file(_sessions_registry[_active_session_id])  # may be brand new
+        _save_index()
+        if active_changed:
+            sess = _sessions_registry[_active_session_id]
+            _broadcast(
+                {"type": "session_activated", "session_id": sess["id"], "title": sess["title"]}
+            )
+        _broadcast({"type": "session_list_changed"})
+        return {"status": "deleted", "active": _active_session_id}
 
     # -----------------------------------------------------------------------
     # SSE events
@@ -752,7 +1054,9 @@ try:
     ) -> Response:
         global _turn_count
         s = _get_settings()
-        session_id = x_session_id or str(uuid.uuid4())
+        # Voice turns flow into the active session (shared with dashboard chat),
+        # so the transcript and LLM memory are unified across voice and typing.
+        session_id = _get_active_session()["id"]
 
         _broadcast({"type": "status", "text": "Audio received — transcribing..."})
 
@@ -851,10 +1155,9 @@ try:
             "response": response_text,
             "tool_calls": tool_calls_used,
             "session_id": session_id,
+            "source": "voice",
         }
-        _conversation_log.append(turn)
-        if len(_conversation_log) > 200:
-            _conversation_log.pop(0)
+        _append_round(session_id, turn)
 
         _broadcast({"type": "turn", **turn})
         _broadcast({"type": "status", "text": "Idle"})
@@ -876,7 +1179,15 @@ try:
         if not text:
             raise HTTPException(status_code=400, detail="text required")
 
-        session_id = data.get("session_id", "dashboard")
+        # Typing into a viewed session continues it (and brings it to front as the
+        # active session); unknown/missing ids fall back to the active session.
+        requested = data.get("session_id")
+        if requested and requested in _sessions_registry:
+            if requested != _active_session_id:
+                _set_active(requested)
+            session_id = requested
+        else:
+            session_id = _get_active_session()["id"]
         s = _get_settings()
 
         _broadcast({"type": "transcript", "text": text})
@@ -916,9 +1227,7 @@ try:
             "session_id": session_id,
             "source": "chat",
         }
-        _conversation_log.append(turn)
-        if len(_conversation_log) > 200:
-            _conversation_log.pop(0)
+        _append_round(session_id, turn)
 
         _broadcast({"type": "turn", **turn})
         _broadcast({"type": "status", "text": "Idle"})
