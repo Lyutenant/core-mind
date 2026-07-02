@@ -113,10 +113,24 @@ tools:
     - name: filesystem        # stdio: spawn a local subprocess
       transport: stdio
       command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
-    - name: node              # http: connect to the Pi's Node MCP server
+    - name: node              # http: connect to the Pi's Node MCP server (SSE)
       transport: http
       url: http://100.y.y.y:8767   # Pi's Tailscale IP
 ```
+
+Three transports are supported:
+
+| `transport` | Protocol | Extra fields |
+|---|---|---|
+| `stdio` | spawn a local subprocess | `command`; optional `env` |
+| `http` | SSE (`/sse` is appended to `url`) | `url`; optional `headers` |
+| `streamable-http` | Streamable HTTP (`url` used as-is) | `url`; optional `headers` |
+
+`headers` and `env` values may reference environment variables as `${VAR}` — the
+reference is expanded from the Hub's environment when the connection is made, so
+secrets (API tokens) never sit in `config.yaml` and are never shown in the
+dashboard's Settings view. An undefined variable disables that server at startup
+with a clear log message instead of retrying forever.
 
 **Startup order does not matter.** If the Node is not yet up when the Hub starts, the Hub retries with exponential backoff (10 s → 60 s max). Tools become available as soon as the Node is reachable — no Hub restart needed.
 
@@ -127,6 +141,63 @@ curl http://localhost:8765/api/tools
 ```
 
 If `mcp` is empty, check Hub logs for `"initial connection failed"` or `"mcp package not installed"`.
+
+---
+
+## Smart Home via Home Assistant
+
+[Home Assistant](https://www.home-assistant.io/) (HA) ships an official
+[MCP Server integration](https://www.home-assistant.io/integrations/mcp_server/), so CoreMind
+can control your home ("turn on the living room light, over") with **zero bespoke code** — HA
+is just another entry in `tools.mcp_servers`. HA exposes its Assist API as MCP tools
+(`HassTurnOn`, `HassTurnOff`, `GetLiveContext`, …).
+
+HA is installed and managed entirely outside CoreMind. Running
+[HA Container](https://www.home-assistant.io/installation/raspberrypi/#install-home-assistant-container)
+(Docker) on the same Pi as the CoreMind Node works well — HA never opens the audio device, and
+the Pi 5 handles both comfortably:
+
+```bash
+# On the Pi (Docker required):
+docker run -d --name homeassistant --restart=unless-stopped \
+  --network=host -e TZ=America/New_York \
+  -v /home/pi/homeassistant:/config \
+  ghcr.io/home-assistant/home-assistant:stable
+# Then onboard at http://<pi>:8123
+```
+
+One-time setup in the HA web UI:
+
+1. **Enable the MCP server:** Settings → Devices & services → Add integration →
+   *Model Context Protocol Server*.
+2. **Expose entities:** Settings → Voice assistants → Expose. **This is the safety
+   boundary** — CoreMind can only see and control what you expose here, and voice commands
+   run *without* a confirmation step. Expose lights, switches, and media players; do **not**
+   expose locks, alarm panels, garage doors, or anything you wouldn't want triggered by a
+   misheard sentence.
+3. **Create a token:** your profile → Security → Long-lived access tokens → Create.
+
+Then on the Hub, put the token in the Hub's environment (e.g. in the `.env` /
+`launchd`/shell profile that starts `coremind server` — never in `config.yaml`) and add the
+server entry:
+
+```yaml
+tools:
+  mcp_servers:
+    - name: homeassistant
+      transport: streamable-http
+      url: http://100.y.y.y:8123/api/mcp   # HA host (Tailscale IP if HA runs on the Pi)
+      headers:
+        Authorization: "Bearer ${HA_TOKEN}"
+```
+
+Restart the Hub and verify with `curl http://localhost:8765/api/tools` — the `mcp` list
+should now include `Hass*` tools. Entities exposed later are picked up automatically by the
+periodic re-sync (or immediately via the Tools panel's **Sync MCP** button).
+
+Note: HA adds roughly 10–20 tools to the schema list the LLM sees. Small local models get
+less reliable at tool selection as the count grows — if home commands start misfiring, try a
+stronger `ollama.model` before blaming HA.
 
 ---
 

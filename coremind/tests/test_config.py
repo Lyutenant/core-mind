@@ -10,9 +10,11 @@ from coremind.config.settings import (
     AppConfig,
     AudioConfig,
     BrainConfig,
+    MCPServerConfig,
     MemoryConfig,
     OllamaConfig,
     Settings,
+    expand_env_refs,
     load_settings,
 )
 
@@ -127,3 +129,78 @@ def test_env_var_overrides_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("COREMIND_AUDIO__SAMPLE_RATE", "44100")
     settings = load_settings(str(tmp_path / "nonexistent.yaml"))
     assert settings.audio.sample_rate == 44100
+
+
+# --- MCP server config: headers/env + ${VAR} secret expansion -----------------
+
+
+def test_mcp_server_headers_env_default_none():
+    cfg = MCPServerConfig(name="node", transport="http", url="http://pi:8767")
+    assert cfg.headers is None
+    assert cfg.env is None
+    assert cfg.resolved_headers() is None
+    assert cfg.resolved_env() is None
+
+
+def test_expand_env_refs_substitutes_and_passes_through(monkeypatch):
+    monkeypatch.setenv("CM_TEST_TOKEN", "s3cret")
+    assert expand_env_refs("Bearer ${CM_TEST_TOKEN}") == "Bearer s3cret"
+    assert expand_env_refs("no refs here") == "no refs here"
+    # Multiple references in one value all expand.
+    monkeypatch.setenv("CM_TEST_B", "x")
+    assert expand_env_refs("${CM_TEST_TOKEN}/${CM_TEST_B}") == "s3cret/x"
+
+
+def test_expand_env_refs_missing_var_fails_closed():
+    with pytest.raises(ConfigError, match="CM_TEST_MISSING"):
+        expand_env_refs("Bearer ${CM_TEST_MISSING}")
+
+
+def test_resolved_headers_expands_but_model_keeps_literal(monkeypatch):
+    """The secret is only in resolved_headers(); model_dump keeps the ${VAR} literal.
+
+    GET /api/config serves a model_dump to every dashboard client, so an expanded
+    token inside the model would leak to any browser on the tailnet.
+    """
+    monkeypatch.setenv("CM_TEST_HA_TOKEN", "abc123")
+    cfg = MCPServerConfig(
+        name="homeassistant",
+        transport="streamable-http",
+        url="http://ha:8123/api/mcp",
+        headers={"Authorization": "Bearer ${CM_TEST_HA_TOKEN}"},
+    )
+    assert cfg.resolved_headers() == {"Authorization": "Bearer abc123"}
+    assert cfg.model_dump()["headers"] == {"Authorization": "Bearer ${CM_TEST_HA_TOKEN}"}
+
+
+def test_resolved_env_expands(monkeypatch):
+    monkeypatch.setenv("CM_TEST_HA_TOKEN", "abc123")
+    cfg = MCPServerConfig(
+        name="hass-stdio",
+        transport="stdio",
+        command=["uvx", "some-server"],
+        env={"HA_TOKEN": "${CM_TEST_HA_TOKEN}", "PLAIN": "value"},
+    )
+    assert cfg.resolved_env() == {"HA_TOKEN": "abc123", "PLAIN": "value"}
+
+
+def test_mcp_server_yaml_roundtrip(tmp_path):
+    """A streamable-http server entry with headers loads from YAML unexpanded."""
+    config = tmp_path / "config.yaml"
+    config.write_text(
+        textwrap.dedent(
+            """
+            tools:
+              mcp_servers:
+                - name: homeassistant
+                  transport: streamable-http
+                  url: http://ha:8123/api/mcp
+                  headers:
+                    Authorization: "Bearer ${HA_TOKEN}"
+            """
+        )
+    )
+    settings = load_settings(str(config))
+    (srv,) = settings.tools.mcp_servers
+    assert srv.transport == "streamable-http"
+    assert srv.headers == {"Authorization": "Bearer ${HA_TOKEN}"}

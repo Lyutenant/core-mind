@@ -112,8 +112,15 @@ tools:
   #     transport: stdio
   #     command: ["npx", "@modelcontextprotocol/server-filesystem", "/path/to/docs"]
   #   - name: node              # REQUIRED for music + ATC tools on the Pi
-  #     transport: http
+  #     transport: http         # "http" = SSE (the Node MCP server's transport)
   #     url: http://100.x.x.x:8767   # replace with Pi's Tailscale IP (tailscale ip -4)
+  #   - name: homeassistant     # smart-home control via Home Assistant's MCP Server
+  #     transport: streamable-http   # HA speaks Streamable HTTP; URL is used as-is
+  #     url: http://100.x.x.x:8123/api/mcp   # HA host (e.g. the Pi running HA Container)
+  #     headers:
+  #       # ${VAR} is read from the Hub's environment at connect time, so the
+  #       # long-lived access token never sits in this file. See docs/tools.md.
+  #       Authorization: "Bearer ${HA_TOKEN}"
 
 remote_brain:
   enabled: false   # Hub does not forward to another Hub

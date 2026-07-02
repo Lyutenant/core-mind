@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Literal, Optional, Union
 
@@ -136,11 +137,51 @@ class RemoteBrainConfig(BaseModel):
     timeout_seconds: float = 90.0
 
 
+_ENV_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def expand_env_refs(value: str) -> str:
+    """Expand ``${VAR}`` references in a config string from the process environment.
+
+    Raises ConfigError on an undefined variable — a half-expanded secret (e.g. a
+    literal ``Bearer ${HA_TOKEN}`` header) would only surface as a confusing 401
+    retry loop later, so fail closed with a clear message instead.
+    """
+    def _sub(m: re.Match) -> str:
+        var = m.group(1)
+        val = os.environ.get(var)
+        if val is None:
+            raise ConfigError(
+                f"config references undefined environment variable ${{{var}}}"
+            )
+        return val
+
+    return _ENV_REF_RE.sub(_sub, value)
+
+
 class MCPServerConfig(BaseModel):
     name: str
-    transport: str          # "stdio" | "http"
+    transport: str          # "stdio" | "http" (SSE) | "streamable-http"
     command: Optional[list[str]] = None   # stdio only: command + args to spawn
-    url: Optional[str] = None             # http only: base URL e.g. http://pi:8767
+    url: Optional[str] = None             # http transports: base URL e.g. http://pi:8767
+    # Extra request headers for http transports (e.g. Authorization for Home
+    # Assistant). Values may reference environment variables as ${VAR} so secrets
+    # stay out of YAML; references are expanded at connect time, never stored in
+    # the model (GET /api/config serves a model_dump to the dashboard).
+    headers: Optional[dict[str, str]] = None
+    # Extra env vars for the spawned process (stdio only), merged over the MCP
+    # SDK's default environment. Same ${VAR} expansion rules as headers.
+    env: Optional[dict[str, str]] = None
+
+    def resolved_headers(self) -> Optional[dict[str, str]]:
+        if not self.headers:
+            return None
+        return {k: expand_env_refs(v) for k, v in self.headers.items()}
+
+    def resolved_env(self) -> Optional[dict[str, str]]:
+        if not self.env:
+            return None
+        return {k: expand_env_refs(v) for k, v in self.env.items()}
 
 
 class ToolsConfig(BaseModel):

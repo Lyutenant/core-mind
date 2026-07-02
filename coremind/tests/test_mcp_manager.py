@@ -276,3 +276,54 @@ def test_hold_and_resync_tolerates_single_failure():
                 await task
 
     asyncio.run(scenario())
+
+
+# --- _hold_connection up-front validation (no mcp package / network needed) ----
+#
+# Each invalid config must set the ready event and return without retrying, so a
+# misconfigured server degrades to a log line instead of wedging Hub startup.
+
+
+def _srv(**kwargs):
+    from coremind.config.settings import MCPServerConfig
+
+    return MCPServerConfig(**kwargs)
+
+
+def _run_hold(srv) -> bool:
+    """Run _hold_connection until it returns; True if it set the ready event."""
+    async def scenario():
+        mgr = MCPManager()
+        ready = asyncio.Event()
+        await asyncio.wait_for(mgr._hold_connection(srv, ready), timeout=2.0)
+        return ready.is_set()
+
+    return asyncio.run(scenario())
+
+
+def test_hold_connection_rejects_unknown_transport():
+    assert _run_hold(_srv(name="x", transport="carrier-pigeon")) is True
+
+
+def test_hold_connection_streamable_http_requires_url():
+    assert _run_hold(_srv(name="ha", transport="streamable-http")) is True
+
+
+def test_hold_connection_missing_env_var_disables_server():
+    """An undefined ${VAR} in headers fails closed at startup (no retry loop)."""
+    srv = _srv(
+        name="ha",
+        transport="http",
+        url="http://ha:8123",
+        headers={"Authorization": "Bearer ${CM_TEST_UNDEFINED_TOKEN}"},
+    )
+    assert _run_hold(srv) is True
+
+
+def test_hold_connection_streamable_http_needs_new_enough_mcp(monkeypatch):
+    """With streamablehttp_client unavailable (old mcp), the server is skipped."""
+    import coremind.tools.mcp_manager as mm
+
+    monkeypatch.setattr(mm, "streamablehttp_client", None)
+    srv = _srv(name="ha", transport="streamable-http", url="http://ha:8123/api/mcp")
+    assert _run_hold(srv) is True

@@ -4,15 +4,25 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
+from coremind import ConfigError
+
 logger = logging.getLogger(__name__)
 
 try:
     from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
+    from mcp.client.stdio import get_default_environment, stdio_client
     from mcp.client.sse import sse_client
     MCP_AVAILABLE = True
+    try:
+        # Separate guard: streamable-http shipped later (mcp>=1.8) than the rest,
+        # so an older install keeps stdio/SSE working and only that transport
+        # degrades with an actionable message.
+        from mcp.client.streamable_http import streamablehttp_client
+    except ImportError:
+        streamablehttp_client = None
 except ImportError:
     MCP_AVAILABLE = False
+    streamablehttp_client = None
 
 if TYPE_CHECKING:
     from coremind.config.settings import MCPServerConfig
@@ -194,13 +204,33 @@ class MCPManager:
                 logger.warning("MCP server %r: stdio transport requires 'command'", srv.name)
                 ready.set()
                 return
-        elif srv.transport == "http":
+        elif srv.transport in ("http", "streamable-http"):
             if not srv.url:
-                logger.warning("MCP server %r: http transport requires 'url'", srv.name)
+                logger.warning(
+                    "MCP server %r: %s transport requires 'url'", srv.name, srv.transport
+                )
+                ready.set()
+                return
+            if srv.transport == "streamable-http" and streamablehttp_client is None:
+                logger.warning(
+                    "MCP server %r: streamable-http transport needs mcp>=1.8 — "
+                    "upgrade with: pip install -U 'coremind[tools]'",
+                    srv.name,
+                )
                 ready.set()
                 return
         else:
             logger.warning("MCP server %r: unknown transport %r", srv.name, srv.transport)
+            ready.set()
+            return
+
+        # Resolve ${VAR} secrets once up front too: the process environment is fixed
+        # for the Hub's lifetime, so a missing variable can never heal by retrying.
+        try:
+            headers = srv.resolved_headers()
+            env = srv.resolved_env()
+        except ConfigError as exc:
+            logger.warning("MCP server %r: %s — server disabled", srv.name, exc)
             ready.set()
             return
 
@@ -210,13 +240,23 @@ class MCPManager:
         while True:
             try:
                 if srv.transport == "stdio":
-                    params = StdioServerParameters(command=srv.command[0], args=srv.command[1:])
+                    spawn_env = {**get_default_environment(), **env} if env else None
+                    params = StdioServerParameters(
+                        command=srv.command[0], args=srv.command[1:], env=spawn_env
+                    )
                     transport_cm = stdio_client(params)
+                elif srv.transport == "streamable-http":
+                    # URL is used as-is (e.g. Home Assistant's /api/mcp) — no
+                    # path suffix convention like SSE's /sse.
+                    transport_cm = streamablehttp_client(srv.url, headers=headers)
                 else:
                     sse_url = srv.url.rstrip("/") + "/sse"
-                    transport_cm = sse_client(sse_url)
+                    transport_cm = sse_client(sse_url, headers=headers)
 
-                async with transport_cm as (read_stream, write_stream):
+                # stdio/SSE yield (read, write); streamable-http yields
+                # (read, write, get_session_id) — index instead of unpacking.
+                async with transport_cm as streams:
+                    read_stream, write_stream = streams[0], streams[1]
                     async with ClientSession(read_stream, write_stream) as session:
                         await session.initialize()
                         self._sessions[srv.name] = session

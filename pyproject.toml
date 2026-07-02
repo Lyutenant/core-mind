@@ -47,7 +47,9 @@ server = [
     "ruamel.yaml>=0.18",
 ]
 tools = [
-    "mcp>=1.0",
+    # >=1.10: streamable-http client transport + the FastMCP structured-output
+    # semantics MCPManager._extract_tool_result relies on.
+    "mcp>=1.10",
 ]
 vision = [
     # Camera capture on the Node. Headless build — no GUI/Qt deps, right for a Pi/server.
