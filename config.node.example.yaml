@@ -144,6 +144,10 @@ node_mcp:
   port: 8767
   music_dir: ~/Music   # root of your music library (Artist/Album/track structure)
   catalog_path: ~/.coremind/music-catalog.json   # run 'coremind music scan' to build
+  # Set false to hide the built-in catalog ATC tools (play_atc, list_atc_*, stop_atc)
+  # when an external ATC resolver MCP handles channel lookup instead — the resolver
+  # returns a stream URL and the LLM plays it via the always-available play_stream tool.
+  atc_enabled: true
   atc_catalog_path: ~/.coremind/atc-catalog.json # run 'coremind atc scan KEWR KJFK' to build
   # For airports with non-standard LiveATC mounts, add them manually:
   #   coremind atc add KIAD "Tower Runway 1C/19C" kiad1_twr_1c19c_120250 --freq 120.250

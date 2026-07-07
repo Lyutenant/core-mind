@@ -98,3 +98,58 @@ def test_resume_is_noop_when_nothing_was_playing(_fake_mpv):
     playback.resume()
     assert playback._current_process is None
     assert playback._paused is False
+
+
+# --- play_stream: the universal primitive for resolver MCPs -------------------
+
+
+def test_play_stream_starts_mpv_with_url(_fake_mpv):
+    from coremind.node_mcp.tools import music_player
+
+    msg = music_player.play_stream("http://example.net/kjfk_twr ", "KJFK Tower")
+    assert playback._current_process is not None
+    assert playback._current_process.cmd == [
+        "mpv", "--no-terminal", "--quiet", "http://example.net/kjfk_twr",
+    ]
+    assert msg == "Streaming KJFK Tower."
+
+
+def test_play_stream_default_title_and_no_url_echo(_fake_mpv):
+    from coremind.node_mcp.tools import music_player
+
+    msg = music_player.play_stream("https://example.net/feed")
+    # The URL must never appear in the reply — the LLM tends to speak it.
+    assert "example.net" not in msg
+    assert msg == "Streaming audio stream."
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "",
+        "   ",
+        "/home/pi/Music/track.mp3",
+        "file:///etc/passwd",
+        "ftp://example.net/feed",
+        "rtsp://example.net/feed",
+        "http://example.net/a b",  # embedded whitespace
+        "mpv --input-ipc-server=/tmp/x",
+    ],
+)
+def test_play_stream_rejects_non_http_input(_fake_mpv, bad):
+    from coremind.node_mcp.tools import music_player
+
+    msg = music_player.play_stream(bad)
+    assert playback._current_process is None
+    assert "http(s)" in msg
+
+
+def test_play_stream_reports_missing_mpv(_fake_mpv, monkeypatch):
+    from coremind.node_mcp.tools import music_player
+
+    def _raise(cmd):
+        raise FileNotFoundError(cmd[0])
+
+    monkeypatch.setattr(playback, "start", _raise)
+    msg = music_player.play_stream("http://example.net/feed")
+    assert "mpv is not installed" in msg

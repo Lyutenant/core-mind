@@ -276,13 +276,32 @@ Re-run whenever you add new music. CoreMind warns in logs if the music directory
 | `add_to_playlist` | "Add that album to my workout playlist" |
 | `remove_from_playlist` | "Remove that track from morning jazz" |
 
-**Mic isolation during playback:** When music is playing and the wake word fires, CoreMind suspends mpv (`SIGSTOP`) before recording so only your voice reaches the mic. After the response, mpv resumes (`SIGCONT`) from exactly where it paused — no gap or restart. This covers both music and ATC since they share one mpv slot.
+**Mic isolation during playback:** When music is playing and the wake word fires, CoreMind fully stops mpv before recording — the USB speaker only allows one open at a time, so the player must release it for the chime and the spoken reply — then relaunches the same stream after the response. Live streams pick up where the feed is; local music restarts from the top of the current queue. This covers music, ATC, and streams since they share one mpv slot.
+
+---
+
+## Stream Playback & Resolver MCPs
+
+`play_stream(url, title)` plays any http(s) audio stream (internet radio, live feeds) on the Node's speaker through the same managed mpv slot as music — so voice-turn mic isolation, `stop_playback`, and one-source-at-a-time all apply automatically.
+
+This is the **resolver pattern** for adding new audio sources: an external MCP server never plays audio itself on the Node (its player would hold the single-open speaker outside CoreMind's control, blocking the chime and TTS mid-turn). Instead it *resolves* — its tools answer "what should play" with a ready-to-play `url` in the result — and the LLM chains that into `play_stream`:
+
+```
+You:      "Put on JFK tower, over"
+LLM:      calls the resolver MCP's search tool → result includes a stream url
+LLM:      calls play_stream(url, "KJFK Tower")
+CoreMind: "Streaming KJFK Tower."
+```
+
+Any audio MCP built this way works as soon as it's added to the Hub's `tools.mcp_servers` — no CoreMind changes. Give the resolver's search/list tools descriptions that point at `play_stream` so a small local model reliably makes the second call.
 
 ---
 
 ## Live ATC Streaming
 
 Stream live ATC audio from LiveATC by voice command. Mic isolation works the same as with music.
+
+**Using your own ATC resolver instead:** if you run an external MCP server that does ATC channel lookup (returning stream URLs for `play_stream` — see the resolver pattern above), set `node_mcp.atc_enabled: false` on the Node to hide the four built-in catalog tools below, so the LLM sees exactly one ATC path. Flip it back to `true` to restore the built-in catalog.
 
 **ATC tools (4):**
 

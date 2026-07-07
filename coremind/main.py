@@ -587,6 +587,7 @@ def run() -> None:
                     atc_catalog_path=settings.node_mcp.atc_catalog_path,
                     port=settings.node_mcp.port,
                     host=settings.node_mcp.host,
+                    atc_enabled=settings.node_mcp.atc_enabled,
                     camera_enabled=settings.vision.enabled,
                     camera_provider=settings.vision.provider,
                     camera_index=settings.vision.camera_index,

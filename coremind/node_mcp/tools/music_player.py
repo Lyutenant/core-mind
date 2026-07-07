@@ -34,6 +34,23 @@ def play_track(path: str) -> str:
     return f"Now playing: {Path(path).name}"
 
 
+def play_stream(url: str, title: str = "") -> str:
+    """Play an internet audio stream (http/https) through the shared mpv slot.
+
+    The universal playback primitive for resolver MCPs: they return a stream
+    URL, this plays it — so voice-turn pause/resume and stop cover it. The URL
+    is never echoed back (it would end up in the spoken reply).
+    """
+    candidate = url.strip()
+    if not candidate.lower().startswith(("http://", "https://")) or " " in candidate:
+        return "play_stream needs an http(s) stream URL, exactly as another tool returned it."
+    try:
+        playback.start(["mpv", "--no-terminal", "--quiet", candidate])
+    except FileNotFoundError:
+        return "mpv is not installed. Run: sudo apt install mpv"
+    return f"Streaming {title.strip() or 'audio stream'}."
+
+
 def play_queue(paths: list[str], shuffle: bool = False) -> str:
     """Write a temp M3U and start mpv with --playlist for multi-track playback."""
     if not paths:

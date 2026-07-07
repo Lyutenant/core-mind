@@ -12,6 +12,7 @@ def create_node_mcp_server(
     atc_catalog_path: str = "~/.coremind/atc-catalog.json",
     host: str = "127.0.0.1",
     port: int = 8767,
+    atc_enabled: bool = True,
     camera_enabled: bool = False,
     camera_provider: str = "opencv",
     camera_index: int | None = None,
@@ -36,7 +37,8 @@ def create_node_mcp_server(
 
     music_player._music_dir = _music_dir
     music_player.init_catalog(_music_dir, _catalog_path)
-    atc_player.init_atc_catalog(_atc_catalog_path)
+    if atc_enabled:
+        atc_player.init_atc_catalog(_atc_catalog_path)
 
     mcp = FastMCP("CoreMind Node", host=host, port=port)
 
@@ -71,11 +73,21 @@ def create_node_mcp_server(
         """Play a saved playlist by name. Set shuffle=true to randomize order."""
         return music_player.play_playlist_by_name(name, shuffle=shuffle)
 
+    # --- Stream playback ---
+    # The universal primitive for resolver MCPs: a resolver tool returns a
+    # stream URL, this plays it on the room speaker through the shared mpv
+    # slot, so voice-turn pause/resume and stop_playback apply automatically.
+
+    @mcp.tool()
+    def play_stream(url: str, title: str = "") -> str:
+        """Play an internet audio stream (live feed, radio) on the room speaker. Pass the exact stream URL another tool returned, and a short title to confirm what's playing."""
+        return music_player.play_stream(url, title)
+
     # --- Stop ---
 
     @mcp.tool()
     def stop_playback() -> str:
-        """Stop currently playing music."""
+        """Stop currently playing audio (music or streams)."""
         return music_player.stop_playback()
 
     # --- Volume ---
@@ -120,26 +132,34 @@ def create_node_mcp_server(
         return music_player.remove_from_playlist(playlist, tracks)
 
     # --- ATC tools ---
+    # Gated so an external ATC resolver MCP (feeding play_stream) can own ATC
+    # without the LLM seeing a second, competing set of ATC tools.
+    if atc_enabled:
 
-    @mcp.tool()
-    def play_atc(query: str) -> str:
-        """Stream a live ATC feed. Say the airport and channel type, e.g. 'KEWR tower' or 'Newark approach'."""
-        return atc_player.play_atc(query)
+        @mcp.tool()
+        def play_atc(query: str) -> str:
+            """Stream a live ATC feed. Say the airport and channel type, e.g. 'KEWR tower' or 'Newark approach'."""
+            return atc_player.play_atc(query)
 
-    @mcp.tool()
-    def list_atc_airports() -> str:
-        """List all airports with ATC streams available in the catalog."""
-        return atc_player.list_atc_airports()
+        @mcp.tool()
+        def list_atc_airports() -> str:
+            """List all airports with ATC streams available in the catalog."""
+            return atc_player.list_atc_airports()
 
-    @mcp.tool()
-    def list_atc_channels(airport: str) -> str:
-        """List all ATC channels for a specific airport (e.g. 'KEWR' or 'Newark')."""
-        return atc_player.list_atc_channels(airport)
+        @mcp.tool()
+        def list_atc_channels(airport: str) -> str:
+            """List all ATC channels for a specific airport (e.g. 'KEWR' or 'Newark')."""
+            return atc_player.list_atc_channels(airport)
 
-    @mcp.tool()
-    def stop_atc() -> str:
-        """Stop the currently streaming ATC audio."""
-        return atc_player.stop_atc()
+        @mcp.tool()
+        def stop_atc() -> str:
+            """Stop the currently streaming ATC audio."""
+            return atc_player.stop_atc()
+    else:
+        logger.info(
+            "Node ATC catalog tools disabled (node_mcp.atc_enabled=false) — "
+            "expecting an external ATC resolver MCP to feed play_stream"
+        )
 
     # --- Camera (vision) ---
     # Only exposed when a camera is configured on this Node. The Hub's `look` tool
@@ -173,6 +193,7 @@ async def run_node_mcp_server(
     atc_catalog_path: str = "~/.coremind/atc-catalog.json",
     port: int = 8767,
     host: str = "127.0.0.1",
+    atc_enabled: bool = True,
     camera_enabled: bool = False,
     camera_provider: str = "opencv",
     camera_index: int | None = None,
@@ -187,6 +208,7 @@ async def run_node_mcp_server(
         atc_catalog_path,
         host=host,
         port=port,
+        atc_enabled=atc_enabled,
         camera_enabled=camera_enabled,
         camera_provider=camera_provider,
         camera_index=camera_index,

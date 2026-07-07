@@ -131,6 +131,19 @@ def test_env_var_overrides_defaults(tmp_path, monkeypatch):
     assert settings.audio.sample_rate == 44100
 
 
+def test_node_mcp_atc_enabled_defaults_true():
+    settings = Settings()
+    assert settings.node_mcp.atc_enabled is True
+
+
+def test_node_mcp_atc_enabled_yaml_override(tmp_path):
+    config = tmp_path / "config.yaml"
+    config.write_text("node_mcp:\n  enabled: true\n  atc_enabled: false\n")
+    settings = load_settings(str(config))
+    assert settings.node_mcp.atc_enabled is False
+    assert settings.node_mcp.enabled is True
+
+
 # --- MCP server config: headers/env + ${VAR} secret expansion -----------------
 
 

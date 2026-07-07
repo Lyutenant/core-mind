@@ -198,6 +198,9 @@ class NodeMCPConfig(BaseModel):
     port: int = 8767
     music_dir: str = "~/Music"
     catalog_path: str = "~/.coremind/music-catalog.json"
+    # False hides the built-in catalog ATC tools (play_atc, list_atc_*, stop_atc) so an
+    # external ATC resolver MCP + play_stream can own ATC without duplicate tools.
+    atc_enabled: bool = True
     atc_catalog_path: str = "~/.coremind/atc-catalog.json"
 
 
