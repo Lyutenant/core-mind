@@ -80,7 +80,7 @@ def create_node_mcp_server(
 
     @mcp.tool()
     def play_stream(url: str, title: str = "") -> str:
-        """Play an internet audio stream (live feed, radio) on the room speaker. Pass the exact stream URL another tool returned, and a short title to confirm what's playing."""
+        """Play an internet audio stream (live ATC air traffic control feed, internet radio) on the room speaker. Pass the exact stream URL another tool returned (e.g. a channel's 'url' field), and a short title to confirm what's playing."""
         return music_player.play_stream(url, title)
 
     # --- Stop ---
