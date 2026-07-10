@@ -43,7 +43,11 @@ def play_stream(url: str, title: str = "") -> str:
     """
     candidate = url.strip()
     if not candidate.lower().startswith(("http://", "https://")) or " " in candidate:
-        return "play_stream needs an http(s) stream URL, exactly as another tool returned it."
+        return (
+            "That is not a stream URL. Pass the exact value of the 'url' field "
+            "from the channel/stream result (it starts with http:// or https://), "
+            "not a channel_id, mount, or name."
+        )
     try:
         playback.start(["mpv", "--no-terminal", "--quiet", candidate])
     except FileNotFoundError:

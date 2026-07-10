@@ -134,6 +134,7 @@ def test_play_stream_default_title_and_no_url_echo(_fake_mpv):
         "rtsp://example.net/feed",
         "http://example.net/a b",  # embedded whitespace
         "mpv --input-ipc-server=/tmp/x",
+        "kiad1-dep-n-asper-125050",  # a resolver channel_id passed instead of the url
     ],
 )
 def test_play_stream_rejects_non_http_input(_fake_mpv, bad):
@@ -141,7 +142,9 @@ def test_play_stream_rejects_non_http_input(_fake_mpv, bad):
 
     msg = music_player.play_stream(bad)
     assert playback._current_process is None
-    assert "http(s)" in msg
+    # The rejection must coach the LLM toward a retry with the right field.
+    assert "'url' field" in msg
+    assert "http://" in msg
 
 
 def test_play_stream_reports_missing_mpv(_fake_mpv, monkeypatch):
