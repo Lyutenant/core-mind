@@ -30,6 +30,19 @@ app:
 
 You can still ask "What's the weather in Tokyo?" to override the default.
 
+`user_location` is enforced at three layers so a misheard word can't hijack the
+question: the system prompt tells the LLM that a garbled non-place word is
+likely a mis-transcription and to fall back to your location (a clearly named
+real place still wins), the tool's `location` parameter is optional and
+defaults to `user_location`, and an "unknown location" answer from the weather
+service coaches the LLM to retry with your configured location instead of
+giving up (transient service errors are reported as such, never blamed on the
+location). For recurring mishearings, also add the word to `stt.hotwords`
+(see `config.hub.example.yaml`).
+
+Remember: in remote (Node → Hub) mode these come from the **Hub's** config —
+setting them on the Pi has no effect (same ownership as `app.personality`).
+
 **Aviation weather defaults:**
 ```yaml
 app:

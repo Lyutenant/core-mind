@@ -282,7 +282,11 @@ def _build_system_prompt(s) -> str:
             location_uses = "weather and time"
         parts.append(
             f"The user is located in {s.app.user_location}. "
-            f"When they ask about {location_uses} without specifying a place, use their location."
+            f"When they ask about {location_uses} without specifying a place, use their location. "
+            "Their words arrive via speech recognition, so a nonsense or garbled word "
+            "where a place name would go is likely a mis-transcription — fall back to "
+            "their location instead of treating it as a place. A clearly named real "
+            "place still overrides their location."
         )
     if s.app.user_timezone:
         parts.append(f"The user's local timezone is {s.app.user_timezone}.")
@@ -385,6 +389,7 @@ def _get_dispatcher():
             _dispatcher.register_built_ins(
                 s.tools.built_in,
                 default_timezone=s.app.user_timezone,
+                user_location=s.app.user_location,
                 home_airport=s.app.home_airport,
                 taf_airport=s.app.taf_airport,
                 vision_client=vision_client,

@@ -50,8 +50,10 @@ stt:
   beam_size: 8
   vad_filter: true
   # Bias the decoder toward your vocabulary — the practical substitute for
-  # fine-tuning on your own voice. Add the names/jargon Whisper keeps mangling.
-  hotwords: "CoreMind, KJYO, KIAD, METAR, TAF, Ollama, Piper, Tailscale"
+  # fine-tuning on your own voice. Add the names/jargon Whisper keeps mangling,
+  # including everyday words it mishears from *you* (accent/mic quirks — e.g.
+  # "weather" coming out as a garbled proper noun).
+  hotwords: "CoreMind, weather, KJYO, KIAD, METAR, TAF, Ollama, Piper, Tailscale"
   initial_prompt: "Aviation and home-assistant voice commands."
 
 tts:

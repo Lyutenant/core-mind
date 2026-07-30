@@ -52,6 +52,7 @@ class ToolDispatcher:
         names: list[str],
         *,
         default_timezone: str | None = None,
+        user_location: str | None = None,
         home_airport: str | None = None,
         taf_airport: str | None = None,
         vision_client=None,
@@ -64,6 +65,9 @@ class ToolDispatcher:
             if name == "time":
                 from coremind.tools.built_in.time_tool import TimeTool
                 self.register(TimeTool(timezone=default_timezone))
+            elif name == "weather":
+                from coremind.tools.built_in.weather_tool import WeatherTool
+                self.register(WeatherTool(default_location=user_location))
             elif name == "aviation_weather":
                 from coremind.tools.built_in.aviation_weather_tool import AviationWeatherTool
                 self.register(AviationWeatherTool(home_airport=home_airport, taf_airport=taf_airport))

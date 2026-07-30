@@ -38,6 +38,22 @@ def _hourly_desc(day: dict, target_time: str = "1200") -> str:
     return hourly[0].get("weatherDesc", [{}])[0].get("value", "") if hourly else ""
 
 
+def _is_unknown_location(resp: httpx.Response) -> bool:
+    """wttr.in signals an unknown name via 404, or 500 with a 'not found' body.
+
+    Anything else (429 rate limit, 502/503 outage) is a service problem, not a
+    bad location — those must never trigger the location-coaching path.
+    """
+    if resp.status_code == 404:
+        return True
+    if resp.status_code == 500:
+        try:
+            return "not found" in resp.text.lower()
+        except Exception:
+            return False
+    return False
+
+
 def _rain_note(day: dict) -> str:
     """Return a rain/snow note if chance is notable (≥20%)."""
     hourly = day.get("hourly", [])
@@ -120,31 +136,65 @@ def _format_forecast_day(day: dict, index: int) -> str:
 
 class WeatherTool(Tool):
     name = "get_weather"
-    description = (
-        "Get the weather for a location. "
-        "Use days=1 for current conditions and today's forecast (default), "
-        "days=2 to include tomorrow, or days=3 for a full 3-day outlook."
-    )
     requires_confirmation = False
-    parameters = {
-        "type": "object",
-        "properties": {
-            "location": {
-                "type": "string",
-                "description": "City name or location, e.g. 'London' or 'New York'.",
+
+    def __init__(self, default_location: str | None = None) -> None:
+        self._default = (default_location or "").strip() or None
+        # The advertised schema must match what this instance can fulfill:
+        # `location` is only omittable when a configured default exists.
+        location_desc = "City name or location, e.g. 'London' or 'New York'."
+        default_clause = ""
+        if self._default:
+            location_desc += " Omit to use the user's configured location."
+            default_clause = "Defaults to the user's location when none specified. "
+        self.description = (
+            "Get the weather for a location. "
+            f"{default_clause}"
+            "Use days=1 for current conditions and today's forecast (default), "
+            "days=2 to include tomorrow, or days=3 for a full 3-day outlook."
+        )
+        self.parameters = {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": location_desc,
+                },
+                "days": {
+                    "type": "integer",
+                    "description": (
+                        "How many days to cover: 1 = current + today (default), "
+                        "2 = + tomorrow, 3 = 3-day forecast."
+                    ),
+                },
             },
-            "days": {
-                "type": "integer",
-                "description": (
-                    "How many days to cover: 1 = current + today (default), "
-                    "2 = + tomorrow, 3 = 3-day forecast."
-                ),
-            },
-        },
-        "required": ["location"],
-    }
+        }
+        if not self._default:
+            self.parameters["required"] = ["location"]
+
+    def _unknown_location_msg(self, location: str) -> str:
+        # Coach the LLM back into the tool loop (same idea as play_stream's
+        # rejection message): a garbled STT token must not dead-end the turn.
+        if self._default and location.lower() == self._default.lower():
+            return (
+                f"The configured user location '{location}' isn't recognized by the "
+                "weather service. Tell the user to fix app.user_location in Settings."
+            )
+        msg = (
+            f"The weather service doesn't recognize '{location}' as a place — "
+            "it may be a mis-transcribed word rather than a real location."
+        )
+        if self._default:
+            msg += (
+                " Call get_weather again without the 'location' parameter "
+                "to use the user's configured location."
+            )
+        else:
+            msg += " Ask the user which city they mean."
+        return msg
 
     def run(self, location: str = "", days: int = 1, **kwargs) -> str:
+        location = (location or "").strip() or self._default or ""
         if not location:
             return "Please specify a location to get the weather for."
 
@@ -157,6 +207,14 @@ class WeatherTool(Tool):
             data = resp.json()
         except httpx.TimeoutException:
             return f"Weather request timed out for {location}. Try again in a moment."
+        except httpx.HTTPStatusError as e:
+            logger.warning("WeatherTool error for %r: %s", location, e)
+            if _is_unknown_location(e.response):
+                return self._unknown_location_msg(location)
+            return (
+                f"The weather service is temporarily unavailable "
+                f"(HTTP {e.response.status_code}). Try again in a few minutes."
+            )
         except Exception as e:
             logger.warning("WeatherTool error for %r: %s", location, e)
             return f"Could not get weather for {location}: {e}"

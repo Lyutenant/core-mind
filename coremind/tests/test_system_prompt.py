@@ -32,3 +32,19 @@ def test_system_prompt_includes_personality_when_set():
 def test_system_prompt_omits_personality_when_unset():
     prompt = _build_system_prompt(Settings())
     assert "persona" not in prompt.lower()
+
+
+def test_system_prompt_location_clause_warns_about_mis_transcription():
+    # A garbled STT token must not count as "specifying a place" — the prompt
+    # tells the model to prefer the configured location over an unfamiliar name.
+    s = Settings(app={"name": "Jarvis", "user_location": "Newark, NJ"})
+    prompt = _build_system_prompt(s)
+    assert "Newark, NJ" in prompt
+    assert "mis-transcription" in prompt
+    assert "speech recognition" in prompt
+
+
+def test_system_prompt_omits_location_clause_when_unset():
+    prompt = _build_system_prompt(Settings())
+    assert "mis-transcription" not in prompt
+    assert "located in" not in prompt

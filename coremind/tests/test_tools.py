@@ -376,3 +376,161 @@ def test_tool_unknown_report_type():
         tool = AviationWeatherTool(home_airport="KJYO")
         result = tool.run(report_type="sigmet")
         assert "Unknown report type" in result
+
+
+# ---------------------------------------------------------------------------
+# WeatherTool — default location + unknown-location coaching (mocked HTTP)
+# ---------------------------------------------------------------------------
+
+from coremind.tools.built_in.weather_tool import WeatherTool  # noqa: E402
+
+SAMPLE_WTTR = {
+    "current_condition": [
+        {
+            "weatherDesc": [{"value": "Sunny"}],
+            "temp_C": "22",
+            "temp_F": "72",
+            "FeelsLikeC": "22",
+            "FeelsLikeF": "72",
+            "humidity": "40",
+            "windspeedKmph": "10",
+            "winddir16Point": "NW",
+            "uvIndex": "4",
+        }
+    ],
+    "weather": [],
+}
+
+
+def _mock_wttr_ok():
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = SAMPLE_WTTR
+    return resp
+
+
+def _mock_wttr_error(status_code: int, body: str = ""):
+    import httpx
+
+    resp = MagicMock()
+    resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        f"HTTP {status_code}",
+        request=MagicMock(),
+        response=MagicMock(status_code=status_code, text=body),
+    )
+    return resp
+
+
+def _mock_wttr_not_found():
+    # wttr.in answers unknown names with 500 + "location not found" body.
+    return _mock_wttr_error(500, "location not found: location not found")
+
+
+def test_weather_schema_location_optional_with_default():
+    # With a configured default, the LLM may omit `location` and the schema says so.
+    tool = WeatherTool(default_location="Newark, NJ")
+    assert "location" not in tool.parameters.get("required", [])
+    assert "Omit" in tool.parameters["properties"]["location"]["description"]
+    assert "Defaults to the user's location" in tool.description
+
+
+def test_weather_schema_location_required_without_default():
+    # Without a default the tool can't fulfill an omitted location — the schema
+    # must not advertise one, or the model makes unusable calls.
+    tool = WeatherTool()
+    assert tool.parameters["required"] == ["location"]
+    assert "Omit" not in tool.parameters["properties"]["location"]["description"]
+    assert "Defaults to the user's location" not in tool.description
+
+
+@patch("coremind.tools.built_in.weather_tool.httpx.get")
+def test_weather_uses_default_location_when_omitted(mock_get):
+    mock_get.return_value = _mock_wttr_ok()
+    tool = WeatherTool(default_location="Newark, NJ")
+    result = tool.run()
+    assert "Newark, NJ" in result
+    assert "Sunny" in result
+    assert "Newark%2C%20NJ" in mock_get.call_args[0][0]
+
+
+@patch("coremind.tools.built_in.weather_tool.httpx.get")
+def test_weather_explicit_location_wins_over_default(mock_get):
+    mock_get.return_value = _mock_wttr_ok()
+    tool = WeatherTool(default_location="Newark, NJ")
+    tool.run(location="London")
+    assert "London" in mock_get.call_args[0][0]
+
+
+def test_weather_no_location_no_default():
+    tool = WeatherTool()
+    assert "Please specify" in tool.run()
+
+
+@patch("coremind.tools.built_in.weather_tool.httpx.get")
+def test_weather_unknown_location_coaches_retry_with_default(mock_get):
+    # A garbled STT token ("Wazard") must coach the model back into the tool
+    # loop, not dead-end the turn.
+    mock_get.return_value = _mock_wttr_not_found()
+    tool = WeatherTool(default_location="Newark, NJ")
+    result = tool.run(location="Wazard")
+    assert "doesn't recognize 'Wazard'" in result
+    assert "without the 'location' parameter" in result
+
+
+@patch("coremind.tools.built_in.weather_tool.httpx.get")
+def test_weather_unknown_location_no_default_asks_user(mock_get):
+    mock_get.return_value = _mock_wttr_not_found()
+    tool = WeatherTool()
+    result = tool.run(location="Wazard")
+    assert "doesn't recognize 'Wazard'" in result
+    assert "which city" in result
+
+
+@patch("coremind.tools.built_in.weather_tool.httpx.get")
+def test_weather_unknown_default_location_reports_config_problem(mock_get):
+    # If the *configured* location itself is rejected, retrying would loop —
+    # point at the config instead.
+    mock_get.return_value = _mock_wttr_not_found()
+    tool = WeatherTool(default_location="Atlantis")
+    result = tool.run()
+    assert "user_location" in result
+    assert "without the 'location' parameter" not in result
+
+
+def test_dispatcher_wires_user_location_into_weather_tool():
+    from coremind.tools.dispatcher import ToolDispatcher
+
+    d = ToolDispatcher()
+    d.register_built_ins(["weather"], user_location="Newark, NJ")
+    assert d._tools["get_weather"]._default == "Newark, NJ"
+
+
+@patch("coremind.tools.built_in.weather_tool.httpx.get")
+def test_weather_404_also_coaches(mock_get):
+    mock_get.return_value = _mock_wttr_error(404, "unknown location")
+    tool = WeatherTool(default_location="Newark, NJ")
+    result = tool.run(location="Wazard")
+    assert "doesn't recognize 'Wazard'" in result
+
+
+@patch("coremind.tools.built_in.weather_tool.httpx.get")
+def test_weather_transient_failure_is_not_a_location_problem(mock_get):
+    # Rate limits / outages must never trigger the location-coaching path —
+    # a retry-then-"fix your config" answer would be confidently wrong.
+    for status in (429, 502, 503):
+        mock_get.return_value = _mock_wttr_error(status, "service unavailable")
+        tool = WeatherTool(default_location="Newark, NJ")
+        result = tool.run(location="London")
+        assert "temporarily unavailable" in result
+        assert str(status) in result
+        assert "doesn't recognize" not in result
+        assert "user_location" not in result
+
+
+@patch("coremind.tools.built_in.weather_tool.httpx.get")
+def test_weather_500_without_not_found_body_is_service_error(mock_get):
+    mock_get.return_value = _mock_wttr_error(500, "internal server error")
+    tool = WeatherTool(default_location="Newark, NJ")
+    result = tool.run(location="London")
+    assert "temporarily unavailable" in result
+    assert "doesn't recognize" not in result
