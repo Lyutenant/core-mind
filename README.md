@@ -1,6 +1,6 @@
 # CoreMind
 
-**v0.5.0** · A two-component voice assistant. The Pi handles audio I/O and wake word; a Mac Mini runs all inference.
+**v0.5.1** · A two-component voice assistant. The Pi handles audio I/O and wake word; a Mac Mini runs all inference.
 
 ```
 [CoreMind Node]  ──audio──▶  [CoreMind Hub]  ──▶  Ollama LLM
@@ -150,7 +150,7 @@ coremind/
 
 ## Status
 
-Implemented and working (v0.5.0):
+Implemented and working (v0.5.1):
 
 - Full voice pipeline on real hardware: wake word (openwakeword/onnx) → VAD → faster-whisper → Ollama → Piper/espeak
 - Hub web dashboard: chat, Nodes panel, Settings editor, Tools panel — mobile-responsive
