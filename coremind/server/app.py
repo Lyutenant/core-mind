@@ -29,7 +29,6 @@ _sessions: dict = {}                    # session_id → live SessionMemory (LLM
 _sessions_registry: dict[str, dict] = {}   # session_id → Session (durable rounds, persisted)
 _active_session_id: str | None = None   # the one session new voice/chat turns land in
 _event_listeners: list[asyncio.Queue] = []
-_turn_count: int = 0
 _node_registry: dict[str, dict] = {}   # node_id → {name, hostname, online, last_seen, config_overrides}
 
 # ---------------------------------------------------------------------------
@@ -175,21 +174,48 @@ def _migrate_legacy_sessions() -> bool:
     return True
 
 
+def _scan_session_files() -> dict[str, dict]:
+    """Load every `<id>.json` under the sessions dir — the directory is the source of truth.
+
+    The index only carries the active pointer and metadata; a session file that is
+    not in the index (copied in by hand, or left behind by a crash between the
+    file write and the index write) is still a session and must show up.
+    """
+    registry: dict[str, dict] = {}
+    if not _SESSIONS_DIR.is_dir():
+        return registry
+    for path in sorted(_SESSIONS_DIR.glob("*.json")):
+        if path == _INDEX_PATH:
+            continue
+        try:
+            sess = json.loads(path.read_text())
+            if not isinstance(sess, dict) or not sess.get("id"):
+                raise ValueError("not a session record")
+            if sess["id"] != path.stem:
+                raise ValueError(f"id {sess['id']!r} does not match filename")
+            sess.setdefault("rounds", [])
+            registry[sess["id"]] = sess
+        except Exception as exc:
+            # Tolerate a foreign/corrupt file; never let one bad file hide the rest.
+            logger.warning("Skipping unreadable session file %s: %s", path.name, exc)
+    return registry
+
+
 def _load_sessions() -> None:
     global _sessions_registry, _active_session_id
     try:
-        if not _migrate_legacy_sessions() and _INDEX_PATH.exists():
-            index = json.loads(_INDEX_PATH.read_text())
-            _active_session_id = index.get("active")
-            registry: dict[str, dict] = {}
-            for sid in (index.get("sessions") or {}):
-                path = _session_path(sid)
-                try:
-                    registry[sid] = json.loads(path.read_text())
-                except Exception as exc:
-                    # Tolerate an indexed session whose file is missing/corrupt.
-                    logger.warning("Skipping unreadable session %s: %s", sid, exc)
-            _sessions_registry = registry
+        if not _migrate_legacy_sessions():
+            _sessions_registry = _scan_session_files()
+            if _INDEX_PATH.exists():
+                index = json.loads(_INDEX_PATH.read_text())
+                _active_session_id = index.get("active")
+                indexed = set(index.get("sessions") or {})
+                if indexed != set(_sessions_registry):
+                    logger.info(
+                        "Session index out of sync with %s (indexed %d, on disk %d) — rebuilding",
+                        _SESSIONS_DIR, len(indexed), len(_sessions_registry),
+                    )
+                    _save_index()
     except Exception as exc:
         logger.warning("Could not load sessions: %s", exc)
     # Enforce invariants: a non-empty registry with a valid active pointer.
@@ -252,6 +278,9 @@ def _append_round(session_id: str, turn: dict) -> None:
     sess["rounds"].append(turn)
     if len(sess["rounds"]) > _MAX_ROUNDS:
         sess["rounds"] = sess["rounds"][-_MAX_ROUNDS:]
+    # A turn is numbered by its position within its session (1-based). This is
+    # what the SSE `turn` event carries; the dashboard renumbers on reload anyway.
+    turn["turn"] = len(sess["rounds"])
     if sess.get("title", "New session") == "New session":
         first = (turn.get("transcript") or "").strip()
         if first:
@@ -260,6 +289,54 @@ def _append_round(session_id: str, turn: dict) -> None:
     # Session file first, then the index (index never references a missing file).
     _save_session_file(sess)
     _save_index()
+
+
+_MAX_TITLE_LEN = 80
+
+
+def _delete_sessions(ids: list[str]) -> tuple[list[str], bool]:
+    """Delete the given sessions (unknown ids ignored). Returns (deleted_ids, active_changed).
+
+    If the active session is among them the pointer is repaired (survivor, else a fresh
+    empty session — persisted so the index never references a missing file). Persists
+    the index once and emits `session_activated` (if needed) + one `session_list_changed`.
+    """
+    global _active_session_id
+    deleted: list[str] = []
+    for sid in ids:
+        if sid in _sessions_registry:
+            del _sessions_registry[sid]
+            _sessions.pop(sid, None)
+            _delete_session_file(sid)
+            deleted.append(sid)
+    if not deleted:
+        return deleted, False
+    active_changed = _active_session_id not in _sessions_registry
+    if active_changed:
+        _active_session_id = None
+        _get_active_session()  # pick a survivor or create a fresh one
+        _save_session_file(_sessions_registry[_active_session_id])  # may be brand new
+    _save_index()
+    if active_changed:
+        sess = _sessions_registry[_active_session_id]
+        _broadcast(
+            {"type": "session_activated", "session_id": sess["id"], "title": sess["title"]}
+        )
+    _broadcast({"type": "session_list_changed", "deleted": deleted})
+    return deleted, active_changed
+
+
+def _rename_session(session_id: str, title: str) -> dict:
+    """Set a session's title (stripped, capped). Raises KeyError / ValueError."""
+    sess = _sessions_registry[session_id]
+    title = " ".join(title.split())[:_MAX_TITLE_LEN]
+    if not title:
+        raise ValueError("title required")
+    sess["title"] = title
+    _save_session_file(sess)
+    _save_index()
+    _broadcast({"type": "session_list_changed"})
+    return sess
 
 
 _load_sessions()
@@ -591,8 +668,8 @@ try:
             "stt_loaded": _stt is not None,
             "tts_provider": s.tts.provider,
             "tts_loaded": _tts is not None,
-            "session_count": len(_sessions),
-            "turn_count": _turn_count,
+            "session_count": len(_sessions_registry),
+            "active_session_turns": len(_get_active_session()["rounds"]),
         }
 
     # -----------------------------------------------------------------------
@@ -871,25 +948,38 @@ try:
 
     @app.delete("/api/sessions/{session_id}")
     async def delete_session(session_id: str):
-        global _active_session_id
         if session_id not in _sessions_registry:
             raise HTTPException(status_code=404, detail="session not found")
-        del _sessions_registry[session_id]
-        _sessions.pop(session_id, None)
-        _delete_session_file(session_id)
-        active_changed = _active_session_id == session_id
-        if active_changed:
-            _active_session_id = None
-            _get_active_session()  # pick a survivor or create a fresh one
-            _save_session_file(_sessions_registry[_active_session_id])  # may be brand new
-        _save_index()
-        if active_changed:
-            sess = _sessions_registry[_active_session_id]
-            _broadcast(
-                {"type": "session_activated", "session_id": sess["id"], "title": sess["title"]}
-            )
-        _broadcast({"type": "session_list_changed"})
+        _delete_sessions([session_id])
         return {"status": "deleted", "active": _active_session_id}
+
+    @app.delete("/api/sessions")
+    async def delete_sessions_bulk(request: Request):
+        """Bulk delete: body `{"ids": [...]}`. Unknown ids are ignored, not an error."""
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        ids = data.get("ids") if isinstance(data, dict) else None
+        if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+            raise HTTPException(status_code=400, detail="ids (list of session ids) required")
+        deleted, _ = _delete_sessions(ids)
+        return {"status": "deleted", "deleted": deleted, "active": _active_session_id}
+
+    @app.patch("/api/sessions/{session_id}")
+    async def rename_session(session_id: str, request: Request):
+        """Rename: body `{"title": "..."}` (whitespace-collapsed, capped at 80 chars)."""
+        if session_id not in _sessions_registry:
+            raise HTTPException(status_code=404, detail="session not found")
+        data = await request.json()
+        title = data.get("title") if isinstance(data, dict) else None
+        if not isinstance(title, str):
+            raise HTTPException(status_code=400, detail="title required")
+        try:
+            sess = _rename_session(session_id, title)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return {"status": "renamed", "id": sess["id"], "title": sess["title"]}
 
     # -----------------------------------------------------------------------
     # SSE events
@@ -1057,7 +1147,6 @@ try:
         x_session_id: Optional[str] = Header(default=None),
         x_confirm_gate: Optional[str] = Header(default=None),
     ) -> Response:
-        global _turn_count
         s = _get_settings()
         # Voice turns flow into the active session (shared with dashboard chat),
         # so the transcript and LLM memory are unified across voice and typing.
@@ -1152,9 +1241,7 @@ try:
                 finally:
                     Path(tts_path).unlink(missing_ok=True)
 
-        _turn_count += 1
         turn = {
-            "turn": _turn_count,
             "timestamp": datetime.datetime.now().isoformat(),
             "transcript": transcript,
             "response": response_text,
@@ -1178,7 +1265,6 @@ try:
 
     @app.post("/v1/chat")
     async def chat_text(request: Request):
-        global _turn_count
         data = await request.json()
         text = data.get("text", "").strip()
         if not text:
@@ -1222,9 +1308,7 @@ try:
 
         # Always broadcast a turn event so the pending card is cleared regardless
         # of whether the LLM succeeded or failed.
-        _turn_count += 1
         turn = {
-            "turn": _turn_count,
             "timestamp": datetime.datetime.now().isoformat(),
             "transcript": text,
             "response": response_text,

@@ -220,3 +220,116 @@ def test_migrates_legacy_sessions_json(clean_sessions):
     clean_sessions._load_sessions()
     assert set(clean_sessions._sessions_registry) == {"aaa", "bbb"}
     assert clean_sessions._active_session_id == "aaa"
+
+
+def test_turns_are_numbered_by_position_within_session(clean_sessions):
+    """`turn` is the 1-based position in its session, not a process-global counter."""
+    a = clean_sessions._get_active_session()["id"]
+    b = clean_sessions._new_session()
+    clean_sessions._sessions_registry[b["id"]] = b
+    r1, r2, r3 = _round(99), _round(99), _round(99)
+    clean_sessions._append_round(a, r1)
+    clean_sessions._append_round(a, r2)
+    clean_sessions._append_round(b["id"], r3)
+    assert [r["turn"] for r in clean_sessions._sessions_registry[a]["rounds"]] == [1, 2]
+    assert clean_sessions._sessions_registry[b["id"]]["rounds"][0]["turn"] == 1
+    # The dict the caller broadcasts is the same one that was renumbered.
+    assert (r1["turn"], r2["turn"], r3["turn"]) == (1, 2, 1)
+
+
+def test_unindexed_session_file_is_loaded(clean_sessions):
+    """The sessions directory is the source of truth: a file missing from the index
+    (dropped in by hand, or written just before a crash) still shows up."""
+    sid = clean_sessions._get_active_session()["id"]
+    clean_sessions._save_session_file(clean_sessions._sessions_registry[sid])
+    clean_sessions._save_index()
+    stray = clean_sessions._new_session()
+    stray["rounds"] = [_round(1, transcript="stray")]
+    clean_sessions._save_session_file(stray)  # file only, index untouched
+    index = json.loads(clean_sessions._INDEX_PATH.read_text())
+    assert stray["id"] not in index["sessions"]
+
+    clean_sessions._sessions_registry = {}
+    clean_sessions._active_session_id = None
+    clean_sessions._load_sessions()
+
+    assert set(clean_sessions._sessions_registry) == {sid, stray["id"]}
+    assert clean_sessions._active_session_id == sid  # index pointer still honoured
+    # The index was rebuilt to match the directory.
+    index = json.loads(clean_sessions._INDEX_PATH.read_text())
+    assert set(index["sessions"]) == {sid, stray["id"]}
+    assert index["sessions"][stray["id"]]["round_count"] == 1
+
+
+def test_foreign_or_corrupt_files_are_skipped(clean_sessions):
+    sid = clean_sessions._get_active_session()["id"]
+    clean_sessions._save_session_file(clean_sessions._sessions_registry[sid])
+    clean_sessions._save_index()
+    d = clean_sessions._SESSIONS_DIR
+    (d / "notes.json").write_text('{"hello": "world"}')          # not a session
+    (d / "broken.json").write_text('{not json')                   # corrupt
+    (d / "deadbeef.json").write_text(json.dumps({"id": "other"}))  # id/filename mismatch
+    (d / "leftover.json.tmp").write_text("{}")                    # atomic-write residue
+
+    clean_sessions._sessions_registry = {}
+    clean_sessions._active_session_id = None
+    clean_sessions._load_sessions()
+
+    assert set(clean_sessions._sessions_registry) == {sid}
+    assert clean_sessions._active_session_id == sid
+
+
+def test_bulk_delete_ignores_unknown_and_repairs_active(clean_sessions):
+    a = clean_sessions._get_active_session()["id"]
+    b = clean_sessions._new_session(); clean_sessions._sessions_registry[b["id"]] = b
+    c = clean_sessions._new_session(); clean_sessions._sessions_registry[c["id"]] = c
+    for sess in clean_sessions._sessions_registry.values():
+        clean_sessions._save_session_file(sess)
+    clean_sessions._save_index()
+
+    deleted, active_changed = clean_sessions._delete_sessions([a, b["id"], "nope"])
+    assert set(deleted) == {a, b["id"]}
+    assert active_changed is True
+    assert set(clean_sessions._sessions_registry) == {c["id"]}
+    assert clean_sessions._active_session_id == c["id"]
+    assert not clean_sessions._session_path(a).exists()
+    assert not clean_sessions._session_path(b["id"]).exists()
+    index = json.loads(clean_sessions._INDEX_PATH.read_text())
+    assert set(index["sessions"]) == {c["id"]} and index["active"] == c["id"]
+
+
+def test_bulk_delete_everything_leaves_a_fresh_active_session(clean_sessions):
+    a = clean_sessions._get_active_session()["id"]
+    deleted, active_changed = clean_sessions._delete_sessions([a])
+    assert deleted == [a] and active_changed
+    new_id = clean_sessions._active_session_id
+    assert new_id != a and new_id in clean_sessions._sessions_registry
+    assert clean_sessions._sessions_registry[new_id]["rounds"] == []
+    assert clean_sessions._session_path(new_id).exists()
+
+
+def test_bulk_delete_nothing_is_a_noop(clean_sessions):
+    a = clean_sessions._get_active_session()["id"]
+    assert clean_sessions._delete_sessions(["nope"]) == ([], False)
+    assert clean_sessions._active_session_id == a
+
+
+def test_rename_session_normalises_and_persists(clean_sessions):
+    sid = clean_sessions._get_active_session()["id"]
+    clean_sessions._rename_session(sid, "  Weather   chat\n")
+    assert clean_sessions._sessions_registry[sid]["title"] == "Weather chat"
+    on_disk = json.loads(clean_sessions._session_path(sid).read_text())
+    assert on_disk["title"] == "Weather chat"
+    index = json.loads(clean_sessions._INDEX_PATH.read_text())
+    assert index["sessions"][sid]["title"] == "Weather chat"
+    # Capped at _MAX_TITLE_LEN; blank rejected; unknown id raises.
+    clean_sessions._rename_session(sid, "x" * 200)
+    assert len(clean_sessions._sessions_registry[sid]["title"]) == clean_sessions._MAX_TITLE_LEN
+    with pytest.raises(ValueError):
+        clean_sessions._rename_session(sid, "   ")
+    with pytest.raises(KeyError):
+        clean_sessions._rename_session("nope", "title")
+    # A renamed session keeps its title after the first turn (only "New session" auto-titles).
+    clean_sessions._rename_session(sid, "Kept")
+    clean_sessions._append_round(sid, _round(1, transcript="what's the weather"))
+    assert clean_sessions._sessions_registry[sid]["title"] == "Kept"

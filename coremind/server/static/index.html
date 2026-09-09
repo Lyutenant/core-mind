@@ -547,6 +547,39 @@
     input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; height: 6px; }
     .nodes-empty { color: var(--text-dim); font-size: 13px; text-align: center; padding: 60px 20px; }
 
+    /* ── Sessions view ── */
+    #view-sessions { overflow-y: auto; }
+    .sessions-toolbar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 10px 12px; margin-bottom: 12px;
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      position: sticky; top: 0; z-index: 2;
+    }
+    .sessions-toolbar .sel-count { font-size: 12px; color: var(--text-muted); min-width: 80px; }
+    .sessions-toolbar .spacer { flex: 1; }
+    .sess-row {
+      display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      margin-bottom: 8px;
+    }
+    .sess-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+    .sess-row input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 auto; cursor: pointer; }
+    .sess-main { flex: 1; min-width: 0; cursor: pointer; }
+    .sess-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sess-title:hover { color: var(--accent); }
+    .sess-meta { font-size: 11px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+    .sess-badge {
+      font-size: 10px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent);
+      border-radius: 999px; padding: 1px 7px; margin-left: 6px; font-family: var(--sans, inherit);
+    }
+    .sess-rename {
+      width: 100%; padding: 4px 6px; font-size: 14px; font-weight: 600;
+      border: 1px solid var(--accent); border-radius: var(--radius);
+      background: var(--bg); color: var(--text);
+    }
+    .sess-actions { display: flex; gap: 4px; flex: 0 0 auto; }
+    .sess-actions .btn { padding: 4px 8px; }
+
     /* ── Tools view ── */
     #view-tools { overflow: hidden; display: none; }
     #view-tools.active { display: flex; flex-direction: column; }
@@ -689,6 +722,9 @@
       <div class="nav-item active" onclick="switchView('dashboard')" id="nav-dashboard">
         <span class="nav-icon">💬</span> Dashboard
       </div>
+      <div class="nav-item" onclick="switchView('sessions')" id="nav-sessions">
+        <span class="nav-icon">🗂️</span> Sessions
+      </div>
       <div class="nav-item" onclick="switchView('nodes')" id="nav-nodes">
         <span class="nav-icon">📡</span> Nodes
       </div>
@@ -805,6 +841,27 @@
             🗑 Clear Log
           </button>
         </div>
+      </div>
+    </section>
+
+    <!-- Sessions view -->
+    <section class="view" id="view-sessions">
+      <div class="nodes-wrap">
+        <div class="nodes-header">
+          <h2>Sessions</h2>
+          <span class="node-meta" id="sessions-summary"></span>
+        </div>
+        <div class="sessions-toolbar">
+          <input type="checkbox" id="sess-select-all" title="Select all"
+                 onchange="toggleSelectAllSessions(this.checked)" style="width:18px;height:18px;cursor:pointer;">
+          <span class="sel-count" id="sess-sel-count">0 selected</span>
+          <button class="btn" onclick="selectSessionsWhere(s => s.round_count === 0)" title="Select sessions with no turns">Empty</button>
+          <button class="btn" onclick="selectSessionsWhere(s => isOlderThanDays(s.updated_at, 30))" title="Select sessions not updated in 30 days">Older than 30d</button>
+          <button class="btn" onclick="clearSessionSelection()">Clear</button>
+          <span class="spacer"></span>
+          <button class="btn danger" id="sess-delete-btn" onclick="deleteSelectedSessions()" disabled>🗑 Delete</button>
+        </div>
+        <div id="sessions-list"></div>
       </div>
     </section>
 
@@ -1264,6 +1321,9 @@
     <button onclick="switchView('dashboard')" id="bn-dashboard" class="active">
       <span class="bn-icon">💬</span>Chat
     </button>
+    <button onclick="switchView('sessions')" id="bn-sessions">
+      <span class="bn-icon">🗂️</span>Sessions
+    </button>
     <button onclick="switchView('nodes')" id="bn-nodes">
       <span class="bn-icon">📡</span>Nodes
     </button>
@@ -1320,7 +1380,7 @@ function switchView(name) {
   const bnBtn = document.getElementById('bn-' + name);
   if (bnBtn) bnBtn.classList.add('active');
   const modeLabel = { hub: 'Hub', node: 'Node', standalone: 'Standalone' }[currentMode] || '';
-  const titleMap = { dashboard: 'Dashboard', nodes: 'Nodes', tools: 'Tools', settings: modeLabel + ' Settings' };
+  const titleMap = { dashboard: 'Dashboard', sessions: 'Sessions', nodes: 'Nodes', tools: 'Tools', settings: modeLabel + ' Settings' };
   document.getElementById('topbar-title').textContent = titleMap[name] || name;
   currentView = name;
   // The stats drawer belongs to the dashboard only: close it on any view switch and
@@ -1330,6 +1390,7 @@ function switchView(name) {
   if (name === 'settings') loadConfig();
   if (name === 'nodes') loadNodes();
   if (name === 'tools') loadTools();
+  if (name === 'sessions') fetchSessions().then(renderSessionsView);
 }
 
 // ── Stats drawer (mobile) ────────────────────────────────────────────────────
@@ -1418,8 +1479,7 @@ async function refreshHealth() {
     setText('val-model',   shortModel(h.model));
     setText('val-stt',     h.stt_model || h.stt_provider);
     setText('val-tts',     h.tts_provider);
-    // Stats panel
-    setText('stat-turns',    h.turn_count);
+    // Stats panel ("Turns" is per viewed session — set by renderSessionSelect)
     setText('stat-sessions', h.session_count);
     setText('stat-model',    h.model);
     setText('stat-stt',      h.stt_model || h.stt_provider);
@@ -1463,6 +1523,9 @@ function renderSessionSelect() {
   }
   const stat = document.getElementById('stat-sessions');
   if (stat) stat.textContent = sessionList.length;
+  const viewed = sessionList.find(s => s.id === viewedSessionId);
+  const turns = document.getElementById('stat-turns');
+  if (turns) turns.textContent = viewed ? viewed.round_count : 0;
 }
 
 function updateLiveIndicator() {
@@ -1476,7 +1539,7 @@ async function loadSession(id) {
   try {
     const sess = await fetch('/api/sessions/' + id).then(r => r.json());
     log.innerHTML = '';
-    (sess.rounds || []).forEach(addTurnCard);
+    (sess.rounds || []).forEach((r, i) => addTurnCard(r, i + 1));
   } catch (e) { /* session may have been deleted */ }
 }
 
@@ -1524,6 +1587,171 @@ async function resumeLive() {
   await loadSession(viewedSessionId);
 }
 
+// ── Sessions view (management: select / bulk delete / rename) ──────────────
+const selectedSessions = new Set();
+
+function isOlderThanDays(iso, days) {
+  const t = Date.parse(iso || '');
+  return !isNaN(t) && (Date.now() - t) > days * 86400000;
+}
+
+function fmtWhen(iso) {
+  const t = new Date(iso || '');
+  if (isNaN(t)) return '—';
+  const sameDay = t.toDateString() === new Date().toDateString();
+  return sameDay ? t.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+                 : t.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' +
+                   t.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+}
+
+function updateSessionsToolbar() {
+  // Drop selections for sessions that no longer exist.
+  for (const id of [...selectedSessions]) {
+    if (!sessionList.some(s => s.id === id)) selectedSessions.delete(id);
+  }
+  const n = selectedSessions.size;
+  const cnt = document.getElementById('sess-sel-count');
+  if (cnt) cnt.textContent = n + ' selected';
+  const del = document.getElementById('sess-delete-btn');
+  if (del) del.disabled = n === 0;
+  const all = document.getElementById('sess-select-all');
+  if (all) {
+    all.checked = n > 0 && n === sessionList.length;
+    all.indeterminate = n > 0 && n < sessionList.length;
+  }
+  const sum = document.getElementById('sessions-summary');
+  if (sum) {
+    const turns = sessionList.reduce((a, s) => a + (s.round_count || 0), 0);
+    sum.textContent = sessionList.length + ' session' + (sessionList.length === 1 ? '' : 's') + ' · ' + turns + ' turns';
+  }
+}
+
+function renderSessionsView() {
+  const list = document.getElementById('sessions-list');
+  if (!list) return;
+  // Don't clobber an in-progress rename.
+  if (document.activeElement && document.activeElement.classList &&
+      document.activeElement.classList.contains('sess-rename')) return;
+  if (!sessionList.length) {
+    list.innerHTML = '<div class="nodes-empty">No sessions.</div>';
+    updateSessionsToolbar();
+    return;
+  }
+  list.innerHTML = sessionList.map(s => {
+    const sel = selectedSessions.has(s.id);
+    const isActive = s.id === activeSessionId;
+    const isViewed = s.id === viewedSessionId;
+    return `<div class="sess-row${sel ? ' selected' : ''}" data-id="${esc(s.id)}">
+      <input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleSessionSelected('${esc(s.id)}', this.checked)">
+      <div class="sess-main" onclick="openSessionFromList('${esc(s.id)}')" title="Open this session">
+        <div class="sess-title" id="sess-title-${esc(s.id)}">${esc(s.title || 'New session')}${isActive ? '<span class="sess-badge">ACTIVE</span>' : ''}${isViewed && !isActive ? '<span class="sess-badge" style="color:var(--text-muted);border-color:var(--border)">VIEWING</span>' : ''}</div>
+        <div class="sess-meta">${s.round_count} turn${s.round_count === 1 ? '' : 's'} · updated ${esc(fmtWhen(s.updated_at))}</div>
+      </div>
+      <div class="sess-actions">
+        <button class="btn" onclick="startRenameSession('${esc(s.id)}')" title="Rename">✎</button>
+      </div>
+    </div>`;
+  }).join('');
+  updateSessionsToolbar();
+}
+
+function toggleSessionSelected(id, on) {
+  if (on) selectedSessions.add(id); else selectedSessions.delete(id);
+  const row = document.querySelector(`.sess-row[data-id="${CSS.escape(id)}"]`);
+  if (row) row.classList.toggle('selected', on);
+  updateSessionsToolbar();
+}
+
+function toggleSelectAllSessions(on) {
+  selectedSessions.clear();
+  if (on) sessionList.forEach(s => selectedSessions.add(s.id));
+  renderSessionsView();
+}
+
+function selectSessionsWhere(pred) {
+  sessionList.filter(pred).forEach(s => selectedSessions.add(s.id));
+  renderSessionsView();
+  if (!selectedSessions.size) toast('No sessions match', '');
+}
+
+function clearSessionSelection() {
+  selectedSessions.clear();
+  renderSessionsView();
+}
+
+async function openSessionFromList(id) {
+  viewedSessionId = id;
+  localStorage.setItem('cm.viewedSession', id);
+  followActive = (id === activeSessionId);
+  switchView('dashboard');
+  renderSessionSelect();
+  updateLiveIndicator();
+  await loadSession(id);
+}
+
+async function deleteSelectedSessions() {
+  const ids = [...selectedSessions];
+  if (!ids.length) return;
+  const includesActive = ids.includes(activeSessionId);
+  const msg = `Delete ${ids.length} session${ids.length === 1 ? '' : 's'}?` +
+    (includesActive ? '\n\nThis includes the ACTIVE session — new voice/chat turns will start a fresh one.' : '') +
+    '\n\nThis cannot be undone.';
+  if (!confirm(msg)) return;
+  try {
+    const r = await fetch('/api/sessions', {
+      method: 'DELETE', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ids}),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    const data = await r.json();
+    selectedSessions.clear();
+    toast(`Deleted ${data.deleted.length} session${data.deleted.length === 1 ? '' : 's'}`, 'success');
+    // The session_list_changed SSE event re-renders every device (including this one).
+  } catch (e) {
+    toast('Delete failed: ' + e.message, 'error');
+  }
+}
+
+function startRenameSession(id) {
+  const el = document.getElementById('sess-title-' + id);
+  const sess = sessionList.find(s => s.id === id);
+  if (!el || !sess) return;
+  const input = document.createElement('input');
+  input.className = 'sess-rename';
+  input.value = sess.title || '';
+  input.maxLength = 80;
+  input.onclick = (e) => e.stopPropagation();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    const title = input.value.trim();
+    // Drop focus first: renderSessionsView() refuses to re-render while a rename
+    // input is focused, so the list would otherwise keep the stale input.
+    input.onblur = null;
+    input.blur();
+    if (save && title && title !== sess.title) {
+      try {
+        const r = await fetch('/api/sessions/' + id, {
+          method: 'PATCH', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({title}),
+        });
+        if (!r.ok) throw new Error(await r.text());
+        toast('Renamed', 'success');
+      } catch (e) { toast('Rename failed: ' + e.message, 'error'); }
+    }
+    await fetchSessions();
+    renderSessionSelect();
+    renderSessionsView();
+  };
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+  input.onblur = () => finish(true);
+  el.replaceWith(input);
+  input.focus(); input.select();
+}
+
 function renderToolChips(toolCalls) {
   if (!toolCalls || !toolCalls.length) return '';
   const chips = toolCalls.map(tc =>
@@ -1534,15 +1762,20 @@ function renderToolChips(toolCalls) {
   return `<div class="tool-calls">${chips}</div>`;
 }
 
-function addTurnCard(turn) {
+// `n` is the turn's 1-based position within its session. Callers rendering a whole
+// session pass the array index; a live `turn` event carries it as `turn.turn`
+// (assigned server-side in _append_round). Old files may hold stale global
+// counters in `turn.turn`, so loadSession always renumbers from position.
+function addTurnCard(turn, n) {
   const log = document.getElementById('conversation-log');
+  const num = n || turn.turn || (log.querySelectorAll('.turn-card').length + 1);
   const card = document.createElement('div');
   card.className = 'turn-card';
-  card.id = 'turn-' + turn.turn;
+  card.id = 'turn-' + num;
   const ts = new Date(turn.timestamp).toLocaleTimeString();
   card.innerHTML = `
     <div class="turn-header">
-      <span>Turn ${turn.turn}</span>
+      <span>Turn ${num}</span>
       <span>${ts}</span>
     </div>
     <div class="turn-body">
@@ -1608,10 +1841,16 @@ async function clearConversation() {
 }
 
 // ── SSE ─────────────────────────────────────────────────────────────────────
+let lastSSEAt = 0;
+const SSE_STALE_MS = 60000;   // > 2 missed server pings (25 s each)
+
 function connectSSE() {
   if (es) es.close();
   es = new EventSource('/api/events');
+  lastSSEAt = Date.now();
+  es.onopen = () => { lastSSEAt = Date.now(); };
   es.onmessage = (e) => {
+    lastSSEAt = Date.now();
     const ev = JSON.parse(e.data);
     handleEvent(ev);
   };
@@ -1619,6 +1858,34 @@ function connectSSE() {
     setTimeout(connectSSE, 3000);
   };
 }
+
+// Re-fetch the session list and, in follow mode, jump to the active session if it
+// changed while we weren't listening. Cheap: two small GETs.
+async function resyncSessions() {
+  const prevActive = activeSessionId;
+  try { await fetchSessions(); } catch (e) { return; }
+  if (followActive && activeSessionId && activeSessionId !== viewedSessionId) {
+    viewedSessionId = activeSessionId;
+    localStorage.setItem('cm.viewedSession', viewedSessionId);
+    await loadSession(viewedSessionId);
+  } else if (viewedSessionId && activeSessionId !== prevActive) {
+    await loadSession(viewedSessionId);   // rounds may have arrived while stale
+  }
+  renderSessionSelect();
+  updateLiveIndicator();
+}
+
+function sseWatchdog() {
+  if (Date.now() - lastSSEAt <= SSE_STALE_MS) return false;
+  connectSSE();
+  resyncSessions();
+  return true;
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!sseWatchdog()) resyncSessions();   // stream looked fine, but events may have been missed
+});
 
 function handleEvent(ev) {
   switch (ev.type) {
@@ -1637,7 +1904,7 @@ function handleEvent(ev) {
       if (pending) pending.remove();
       if (ev.session_id) activeSessionId = ev.session_id;
       if (ev.session_id === viewedSessionId) addTurnCard(ev);
-      fetchSessions().then(renderSessionSelect);   // refresh round counts / title
+      fetchSessions().then(() => { renderSessionSelect(); renderSessionsView(); });   // round counts / title
       refreshHealth();
       break;
     }
@@ -1650,11 +1917,23 @@ function handleEvent(ev) {
           loadSession(viewedSessionId);
         }
         renderSessionSelect();
+        renderSessionsView();
         updateLiveIndicator();
       });
       break;
     case 'session_list_changed':
-      fetchSessions().then(renderSessionSelect);
+      fetchSessions().then(() => {
+        // The session this device was viewing may have been deleted elsewhere.
+        if (viewedSessionId && !sessionList.some(s => s.id === viewedSessionId)) {
+          viewedSessionId = activeSessionId;
+          followActive = true;
+          localStorage.setItem('cm.viewedSession', viewedSessionId);
+          loadSession(viewedSessionId);
+          updateLiveIndicator();
+        }
+        renderSessionSelect();
+        renderSessionsView();
+      });
       break;
     case 'config_saved':
       toast('Configuration saved', 'success');
@@ -2308,6 +2587,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSessions();
   loadNodes();
   setInterval(refreshHealth, 30000);
+  setInterval(sseWatchdog, 15000);
 });
 </script>
 </body>

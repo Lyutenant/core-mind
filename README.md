@@ -153,7 +153,7 @@ coremind/
 Implemented and working (v0.5.1):
 
 - Full voice pipeline on real hardware: wake word (openwakeword/onnx) → VAD → faster-whisper → Ollama → Piper/espeak
-- Hub web dashboard: chat, Nodes panel, Settings editor, Tools panel — mobile-responsive
+- Hub web dashboard: chat, Sessions (list / bulk delete / rename), Nodes panel, Settings editor, Tools panel — mobile-responsive
 - Configurable assistant personality (free-text persona/tone, with presets)
 - Session memory + follow-up listening window with safety mechanisms
 - Wake confirmation gate — the first command after the wake word must end with "over" (configurable) or it's dropped as a false wake; cuts false replies to TV/noise (`runtime.wake_confirm_words`)
