@@ -74,6 +74,9 @@ after first start.
 | [Node Setup](docs/setup-node.md) | Full install, config, audio, Caddy, systemd |
 | [Tools](docs/tools.md) | Built-in tools, vision (camera), MCP servers, music player, ATC streaming |
 | [Troubleshooting](docs/troubleshooting.md) | `coremind doctor`, logs, updating |
+| [Architecture](docs/architecture.md) | Subsystem design notes and invariants |
+| [Roadmap](docs/roadmap.md) | Planned work, in priority order |
+| [AGENTS.md](AGENTS.md) | Development workflow and project rules (for humans and AI coding agents) |
 
 ---
 
