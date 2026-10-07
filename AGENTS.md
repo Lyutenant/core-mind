@@ -130,7 +130,9 @@ coremind/
 
   audio_input/      devices.py, recorder.py
   audio_output/     player.py (auto-resampling for USB speakers)
-  stt/              base.py, whisper_local.py (faster-whisper) + MockSTT
+  stt/              base.py, whisper_local.py (faster-whisper) + MockSTT,
+                    whisper_cpp.py (whisper.cpp via pywhispercpp; Metal on Mac),
+                    __init__.py make_stt() — the single provider-selection point
   tts/              base.py, piper_local.py, openai_tts.py + MockTTS
   brain/            base.py, ollama_client.py (ask + ask_with_tools), router.py
   wake_word/        base.py, dummy.py, openwakeword_engine.py (onnx for Pi)
@@ -210,7 +212,8 @@ mode: hub | node | standalone
 
 app:        name, personality (free-text persona/tone), log_level, user_location, user_timezone, home_airport, taf_airport
 audio:      input_device, output_device (null = auto-select by stable name; int index or name substring to pin), sample_rate, channels
-stt:        provider (whisper_local), model (distil-large-v3 for Hub; tiny/base for Pi standalone), language
+stt:        provider (whisper_local | whisper_cpp | mock), model (faster-whisper: distil-large-v3 for Hub; tiny/base for Pi standalone), language,
+            whisper_cpp: {model (large-v3-turbo), model_path, n_threads, vad_model_path}   # pip install 'coremind[stt-cpp]'
 tts:        provider (piper_local | espeak | openai), model_path
 brain:      provider (ollama), timeout_seconds
 ollama:     base_url, model, vision_model (for the 'look' tool), no_think
@@ -274,6 +277,10 @@ One line per subsystem. **Read the linked section of
   - `_build_system_prompt` (`server/app.py`) serves voice + chat
   - `app.personality` is the persona, and the Hub's value governs in remote mode
   - the location clause defends against STT-garbled place names
+- **[Speech-to-text providers](docs/architecture.md#speech-to-text-providers):**
+  - `make_stt()` is the one selection point (`whisper_local` default, `whisper_cpp`, `mock`)
+  - whisper.cpp settings are nested under `stt.whisper_cpp`; decode knobs are shared
+  - the Hub runs STT off the event loop and logs a `turn timing:` line per voice turn
 - **[Voice loop](docs/architecture.md#voice-loop):**
   - wake → VAD → process → speak → follow-up window, with stop phrases, a minimum word count and
     an echo cooldown
@@ -327,7 +334,7 @@ One line per subsystem. **Read the linked section of
 6. **Commits and pushes follow your role** (see Roles). The maintainer role commits only when
    asked; the agent role commits freely on its own branch and never touches `main`.
 7. Keep the Pi lightweight: inference belongs on the Mac Mini.
-8. Optional backends (faster-whisper, piper, mcp, openwakeword) are behind guarded imports. The
+8. Optional backends (faster-whisper, pywhispercpp, piper, mcp, openwakeword) are behind guarded imports. The
    app must not crash when one is missing; it explains how to install it instead.
 9. No silent fallback to mock backends in production. Log loudly if Ollama is unreachable.
 10. **Prefer auto-detection.** Unset config should auto-pick a sensible default (resolve it to a

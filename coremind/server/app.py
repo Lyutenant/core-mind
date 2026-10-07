@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime
 import json
 import logging
 import os
 import tempfile
+import threading
+import time
 import urllib.parse
 import uuid
 from pathlib import Path
@@ -22,6 +25,7 @@ logger = logging.getLogger(__name__)
 _config_path: Path = Path("config.yaml")
 _settings = None
 _stt = None
+_stt_lock = threading.Lock()  # serializes STT load + decode (whisper.cpp contexts aren't thread-safe)
 _tts = None
 _brain = None
 _dispatcher = None
@@ -393,22 +397,51 @@ def _get_settings():
     return _settings
 
 
+class _TurnTiming:
+    """Per-stage wall-clock timing for one voice turn, logged as a single line.
+
+    Lets you compare STT providers (and spot whether STT, the LLM or TTS is the
+    slow stage) from real traffic in the Hub log.
+    """
+
+    def __init__(self, settings) -> None:
+        from coremind.stt import stt_model_label
+
+        self._stt_label = f"{settings.stt.provider}/{stt_model_label(settings.stt)}"
+        self._start = time.perf_counter()
+        self.ms: dict[str, float] = {}
+
+    @contextlib.contextmanager
+    def stage(self, name: str):
+        t0 = time.perf_counter()
+        try:
+            yield
+        finally:
+            self.ms[name] = (time.perf_counter() - t0) * 1000
+
+    def log(self, outcome: str = "ok") -> None:
+        parts = [f"{name}={ms:.0f}ms" for name, ms in self.ms.items()]
+        total = (time.perf_counter() - self._start) * 1000
+        logger.info(
+            "turn timing: %s total=%.0fms stt_engine=%s outcome=%s",
+            " ".join(parts), total, self._stt_label, outcome,
+        )
+
+
 def _get_stt():
     global _stt
     if _stt is None:
-        from coremind.stt.whisper_local import WhisperLocalSTT
+        from coremind.stt import make_stt, stt_model_label
         s = _get_settings()
-        _stt = WhisperLocalSTT(
-            model=s.stt.model,
-            language=s.stt.language,
-            compute_type=s.stt.compute_type,
-            beam_size=s.stt.beam_size,
-            vad_filter=s.stt.vad_filter,
-            initial_prompt=s.stt.initial_prompt,
-            hotwords=s.stt.hotwords,
-        )
-        logger.info("STT loaded: %s", s.stt.model)
+        _stt = make_stt(s.stt)
+        logger.info("STT loaded: %s (%s)", stt_model_label(s.stt), s.stt.provider)
     return _stt
+
+
+def _transcribe_blocking(wav_path: str) -> str:
+    """Load (first call) and run STT, one turn at a time — call via asyncio.to_thread."""
+    with _stt_lock:
+        return _get_stt().transcribe(wav_path)
 
 
 def _get_brain():
@@ -648,6 +681,8 @@ try:
 
     @app.get("/api/health")
     async def api_health():
+        from coremind.stt import stt_model_label
+
         s = _get_settings()
         ollama_ok = False
         try:
@@ -664,7 +699,7 @@ try:
             "ollama_url": s.ollama.base_url,
             "ollama_reachable": ollama_ok,
             "stt_provider": s.stt.provider,
-            "stt_model": s.stt.model,
+            "stt_model": stt_model_label(s.stt),
             "stt_loaded": _stt is not None,
             "tts_provider": s.tts.provider,
             "tts_loaded": _tts is not None,
@@ -1159,8 +1194,11 @@ try:
             f.write(wav_bytes)
             wav_path = f.name
 
+        timing = _TurnTiming(s)
         try:
-            transcript = _get_stt().transcribe(wav_path)
+            # Off the event loop: a multi-second load/decode must not stall SSE/heartbeats.
+            with timing.stage("stt"):
+                transcript = await asyncio.to_thread(_transcribe_blocking, wav_path)
         except Exception as e:
             logger.error("STT failed: %s", e)
             _broadcast({"type": "status", "text": "STT failed."})
@@ -1169,6 +1207,7 @@ try:
             Path(wav_path).unlink(missing_ok=True)
 
         if not transcript.strip():
+            timing.log("empty transcript")
             _broadcast({"type": "status", "text": "Idle"})
             return Response(content=b"", headers={"X-Transcript": "", "X-Response": ""})
 
@@ -1185,6 +1224,7 @@ try:
                 logger.info(
                     "Discarding turn as false wake (no confirmation word): %r", transcript
                 )
+                timing.log("false wake")
                 _broadcast({"type": "status", "text": "Idle"})
                 return Response(
                     content=b"",
@@ -1207,9 +1247,11 @@ try:
         )
 
         try:
-            response_text, tool_calls_used = await _run_llm_with_tools(messages)
+            with timing.stage("llm"):
+                response_text, tool_calls_used = await _run_llm_with_tools(messages)
         except Exception as e:
             logger.error("LLM failed: %s", e)
+            timing.log("llm error")
             _broadcast({"type": "status", "text": f"LLM error: {e}"})
             return Response(
                 content=b"",
@@ -1234,12 +1276,14 @@ try:
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                     tts_path = f.name
                 try:
-                    tts.synthesize(response_text, tts_path)
+                    with timing.stage("tts"):
+                        tts.synthesize(response_text, tts_path)
                     audio_bytes = Path(tts_path).read_bytes()
                 except Exception as e:
                     logger.warning("TTS failed: %s", e)
                 finally:
                     Path(tts_path).unlink(missing_ok=True)
+        timing.log()
 
         turn = {
             "timestamp": datetime.datetime.now().isoformat(),

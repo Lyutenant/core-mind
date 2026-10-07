@@ -304,33 +304,16 @@ def _build_voice_loop(
         from coremind.brain.ollama_client import MockBrainClient, OllamaClient
         from coremind.brain.router import BrainRouter
         from coremind.memory.session_memory import SessionMemory
-        from coremind.stt.whisper_local import MockSTT, WhisperLocalSTT
+        from coremind.stt import make_stt
+        from coremind.stt.whisper_local import MockSTT
 
-        stt_provider = settings.stt.provider
-        if stt_provider == "whisper_local":
-            try:
-                stt = WhisperLocalSTT(
-                    model=settings.stt.model,
-                    language=settings.stt.language,
-                    compute_type=settings.stt.compute_type,
-                    beam_size=settings.stt.beam_size,
-                    vad_filter=settings.stt.vad_filter,
-                    initial_prompt=settings.stt.initial_prompt,
-                    hotwords=settings.stt.hotwords,
-                )
-            except STTError:
-                console.print(
-                    "[yellow]Warning:[/yellow] faster-whisper not installed — using MockSTT. "
-                    r"Run: pip install 'coremind\[stt]'"
-                )
-                stt = MockSTT()
-        elif stt_provider == "mock":
+        try:
+            stt = make_stt(settings.stt)
+        except STTError as e:
+            from rich.markup import escape
+
+            console.print(f"[yellow]Warning:[/yellow] {escape(str(e))} — using MockSTT.")
             stt = MockSTT()
-        else:
-            raise ConfigError(
-                f"Unsupported stt.provider: {stt_provider!r}. "
-                "Supported: whisper_local, mock."
-            )
 
         provider = settings.brain.provider
         if provider == "ollama":
@@ -853,6 +836,17 @@ def doctor_cmd() -> None:
                 checks.append(Check("STT", "warn",
                                     "faster-whisper not installed — will fall back to MockSTT",
                                     r"Install: pip install 'coremind\[stt]'"))
+        elif stt_provider == "whisper_cpp":
+            try:
+                import pywhispercpp  # noqa: F401
+                from coremind.stt import stt_model_label
+                checks.append(Check("STT", "ok",
+                                    "whisper.cpp (pywhispercpp) available "
+                                    f"(model: {stt_model_label(settings.stt)})"))
+            except ImportError:
+                checks.append(Check("STT", "warn",
+                                    "pywhispercpp not installed — will fall back to MockSTT",
+                                    r"Install: pip install 'coremind\[stt-cpp]'"))
         else:
             checks.append(Check("STT", "skip", f"Provider: {stt_provider!r}"))
 

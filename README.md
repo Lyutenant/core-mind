@@ -136,7 +136,7 @@ coremind/
   config/         Pydantic settings (loaded from config.yaml)
   audio_input/    Microphone recording + VAD
   audio_output/   Speaker playback (auto-resampling for USB speakers)
-  stt/            Speech-to-text (faster-whisper, mock)
+  stt/            Speech-to-text (faster-whisper, whisper.cpp, mock)
   tts/            Text-to-speech (Piper, espeak, mock)
   brain/          LLM client (Ollama + tool calling, mock)
   memory/         Session memory

@@ -38,6 +38,32 @@ Files: `text_match.py`, `runtime.wake_confirm_words`
 - Matching lives in `coremind/text_match.py::match_and_strip_terminator` (case-insensitive, punctuation-tolerant, longest-phrase-wins; strips the terminator before the LLM sees the text). Shared by both gate sites. An utterance that is *only* the terminator strips to empty → also discarded.
 - **Where it runs:** in remote (Node→Hub) mode the Hub's audio is synthesized before the Node ever sees the transcript, so the gate must run on the **Hub** — `/v1/process` after STT, before the LLM. The Node signals the first post-wake turn with the `X-Confirm-Gate: 1` request header; the Hub applies its **own** `runtime.wake_confirm_words` (config ownership mirrors `app.personality`) and on rejection returns an empty body with `X-Rejected: terminator`, which the Node treats as a silent no-op. In **standalone** mode the Node enforces its own config inline in `_process_local_wav`. The gate applies only when a wake word triggered the turn (never push-to-talk / `chat`).
 
+## Speech-to-text providers
+
+Files: `stt/__init__.py`, `stt/whisper_local.py`, `stt/whisper_cpp.py`
+
+- **One selection point:** `make_stt(stt_cfg)` builds the backend for `stt.provider`. Values are
+  `whisper_local` (faster-whisper/CTranslate2; the default), `whisper_cpp` (pywhispercpp;
+  Metal on Apple Silicon) and `mock`. Both the Hub (`_get_stt`) and standalone `coremind run`
+  use it. Add new providers here; never construct a backend inline.
+- `whisper_cpp` settings live in a nested `stt.whisper_cpp` block (model, model_path,
+  n_threads, vad_model_path), so switching providers never clobbers faster-whisper's
+  `stt.model`/`compute_type`. The decode knobs (`language`, `beam_size`, `vad_filter`,
+  `initial_prompt`, `hotwords`) are shared. whisper.cpp has no hotword biasing, so hotwords are
+  folded into the prompt. Its VAD needs an explicit Silero ggml model path.
+- `WhisperCppSTT` downloads ggml models itself, with timeouts and an atomic `.part` rename,
+  into pywhispercpp's models dir. It doesn't use pywhispercpp's downloader, which has no
+  network timeout. It reads WAVs via soundfile and resamples to 16 kHz mono, because
+  pywhispercpp's own loader rejects anything else. Both providers accept whatever rate the
+  Node records at.
+- **The Hub runs STT off the event loop** (`asyncio.to_thread(_transcribe_blocking)` in
+  `/v1/process`), so a multi-second model load or decode doesn't stall SSE or heartbeats.
+  `_stt_lock` keeps turns serialized, as the old synchronous call did. This matters because a
+  whisper.cpp context isn't thread-safe.
+- **Per-turn timing:** `/v1/process` logs one `turn timing: stt=… llm=… tts=… total=…
+  stt_engine=<provider>/<model> outcome=…` line per turn (`_TurnTiming`). Use it to compare
+  providers and to find the slow stage.
+
 ## Tool layer
 
 Files: `tools/`

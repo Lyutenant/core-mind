@@ -943,12 +943,36 @@
             <div class="form-grid">
               <div class="field">
                 <label>Provider</label>
-                <select id="stt.provider">
+                <select id="stt.provider" onchange="onSttProviderChange()">
                   <option value="whisper_local">whisper_local (faster-whisper)</option>
+                  <option value="whisper_cpp">whisper_cpp (whisper.cpp, Metal GPU on Mac)</option>
                   <option value="mock">mock (testing only)</option>
                 </select>
+                <span class="hint">whisper_cpp needs <code>pip install 'coremind[stt-cpp]'</code> on the Hub. Each provider keeps its own model setting.</span>
               </div>
-              <div class="field">
+              <div class="field" data-stt-provider="whisper_cpp">
+                <label>whisper.cpp Model</label>
+                <select id="stt.whisper_cpp.model">
+                  <option value="base.en">base.en — fast, ~140 MB</option>
+                  <option value="small.en">small.en — balanced, ~470 MB</option>
+                  <option value="medium.en">medium.en — accurate, ~1.5 GB</option>
+                  <option value="large-v3-turbo-q5_0">large-v3-turbo-q5_0 — quantized turbo, ~550 MB</option>
+                  <option value="large-v3-turbo">large-v3-turbo — recommended, ~1.6 GB</option>
+                  <option value="large-v3">large-v3 — most accurate, slowest, ~3 GB</option>
+                </select>
+                <span class="hint">ggml model, downloaded on first use. Ignored when a model path is set.</span>
+              </div>
+              <div class="field" data-stt-provider="whisper_cpp">
+                <label>whisper.cpp Model Path</label>
+                <input type="text" id="stt.whisper_cpp.model_path" placeholder="(optional) ~/models/ggml-large-v3-turbo.bin">
+                <span class="hint">Explicit ggml .bin file — wins over the model name.</span>
+              </div>
+              <div class="field" data-stt-provider="whisper_cpp">
+                <label>whisper.cpp VAD Model Path</label>
+                <input type="text" id="stt.whisper_cpp.vad_model_path" placeholder="(optional) ~/models/ggml-silero-v5.1.2.bin">
+                <span class="hint">Silero ggml VAD model. Required for the VAD filter with whisper.cpp.</span>
+              </div>
+              <div class="field" data-stt-provider="whisper_local">
                 <label>Whisper Model</label>
                 <select id="stt.model">
                   <option value="tiny">tiny — fastest, ~75 MB</option>
@@ -975,7 +999,7 @@
                 <input type="text" id="stt.initial_prompt" placeholder="Aviation and home-assistant voice commands.">
                 <span class="hint">Context sentence fed to the decoder to nudge spelling/word choice toward your domain.</span>
               </div>
-              <div class="field">
+              <div class="field" data-stt-provider="whisper_local">
                 <label>Compute Type</label>
                 <select id="stt.compute_type">
                   <option value="int8">int8 — fastest, lowest memory</option>
@@ -2006,6 +2030,15 @@ function applyConfig(cfg) {
   }
 
   onModeChange(mode);
+  onSttProviderChange();
+}
+
+// Show only the STT fields the selected provider uses.
+function onSttProviderChange() {
+  const provider = (document.getElementById('stt.provider') || {}).value;
+  document.querySelectorAll('[data-stt-provider]').forEach(el => {
+    el.style.display = el.dataset.sttProvider === provider ? '' : 'none';
+  });
 }
 
 async function saveConfig() {
@@ -2099,6 +2132,11 @@ function buildConfig() {
       vad_filter: g('stt.vad_filter'),
       initial_prompt: g('stt.initial_prompt', true),
       hotwords: g('stt.hotwords', true),
+      whisper_cpp: {
+        model: g('stt.whisper_cpp.model') || 'large-v3-turbo',
+        model_path: g('stt.whisper_cpp.model_path', true),
+        vad_model_path: g('stt.whisper_cpp.vad_model_path', true),
+      },
     },
     tts: {
       provider: g('tts.provider'),

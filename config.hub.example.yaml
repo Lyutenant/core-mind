@@ -55,6 +55,19 @@ stt:
   # "weather" coming out as a garbled proper noun).
   hotwords: "CoreMind, weather, KJYO, KIAD, METAR, TAF, Ollama, Piper, Tailscale"
   initial_prompt: "Aviation and home-assistant voice commands."
+  # Optional alternative engine: whisper.cpp, which runs on the Metal GPU on Apple
+  # Silicon (faster-whisper is CPU-only on macOS). Install with
+  #   pip install 'coremind[stt-cpp]'
+  # then set `provider: whisper_cpp` above. The block below only applies to
+  # whisper_cpp; model/compute_type above stay faster-whisper's, so switching back
+  # is a one-line change. language, beam_size, vad_filter, initial_prompt and
+  # hotwords are shared (whisper.cpp has no hotword biasing, so hotwords are folded
+  # into the initial prompt).
+  whisper_cpp:
+    model: large-v3-turbo     # ggml model name, downloaded + cached on first use
+    model_path: null          # explicit ggml .bin path — wins over model
+    n_threads: null           # null = pywhispercpp default
+    vad_model_path: null      # Silero ggml VAD model; needed for vad_filter with whisper.cpp
 
 tts:
   # provider options:
