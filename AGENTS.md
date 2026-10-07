@@ -80,7 +80,7 @@ checked out. Keep it project-wide and durable. Feature-in-progress notes go in
 
 **CoreMind Hub** — Mac Mini
 - FastAPI server + web dashboard at `http://<mac-mini>:8765` (the primary config UI — no YAML editing needed)
-- STT (faster-whisper), LLM routing (Ollama), TTS (Piper/espeak), tool execution
+- STT (faster-whisper by default, or whisper.cpp via `stt.provider: whisper_cpp`), LLM routing (Ollama), TTS (Piper/espeak), tool execution
 - Start: `coremind server --host 0.0.0.0` (or behind Caddy with default `127.0.0.1` bind)
 
 **CoreMind Node** — Raspberry Pi 5

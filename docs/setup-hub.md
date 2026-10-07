@@ -41,6 +41,13 @@ pip install -e ".[dev,stt,server]"
 
 This installs `coremind` (editable), `faster-whisper` (STT), and `fastapi`/`uvicorn` (Hub server).
 
+**Optional: whisper.cpp STT (runs on the Mac's Metal GPU, usually faster):**
+```bash
+pip install -e ".[stt-cpp]"
+```
+This installs it alongside faster-whisper, which stays the default. To switch,
+see [Optional: whisper.cpp](#optional-whispercpp-faster-stt-on-apple-silicon).
+
 **Optional — Piper TTS (neural voice, recommended):**
 ```bash
 pip install piper-tts

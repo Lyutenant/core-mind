@@ -36,6 +36,7 @@ git clone https://github.com/Lyutenant/core-mind.git && cd core-mind
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev,stt,server,tools]"   # tools = MCP client for music/ATC
 pip install piper-tts                       # optional: better TTS than espeak (see Hub Setup)
+pip install -e ".[stt-cpp]"                 # optional: whisper.cpp STT on the Mac GPU (see Hub Setup)
 cp config.hub.example.yaml config.yaml      # starting point; tune the rest from the dashboard
 coremind server --host 0.0.0.0
 ```
