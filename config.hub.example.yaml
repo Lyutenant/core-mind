@@ -29,9 +29,40 @@ runtime:
   wake_confirm_words: ["over", "go ahead", "confirm"]
 
 stt:
-  # provider: whisper_local (recommended) or mock (silent, for testing)
+  # ── Engine ────────────────────────────────────────────────────────────────
+  # provider:
+  #   whisper_local — faster-whisper (CTranslate2). The default; CPU-only on macOS.
+  #                   Install: pip install 'coremind[stt]'
+  #   whisper_cpp   — whisper.cpp (pywhispercpp). Runs on the Metal GPU on Apple
+  #                   Silicon, usually several times faster per voice turn.
+  #                   Install: pip install 'coremind[stt-cpp]'
+  #   mock          — returns a fixed transcript; for testing only
+  # Each engine keeps its own model setting (below), so switching is a one-line
+  # change here, and you can switch back any time. Compare them in the Hub log:
+  # every voice turn logs
+  #   turn timing: stt=…ms llm=…ms tts=…ms total=…ms stt_engine=<provider>/<model>
   provider: whisper_local
-  # Model size — speed vs accuracy on Mac CPU:
+
+  # ── Shared by both engines ────────────────────────────────────────────────
+  language: en
+  #   beam_size:  higher = more accurate, slower (5–8 is a good range; 1 = greedy)
+  #   vad_filter: strip silence/noise before decoding; cuts pause-hallucinations
+  #               (whisper_cpp also needs whisper_cpp.vad_model_path, see below)
+  beam_size: 8
+  vad_filter: true
+  # Bias the decoder toward your vocabulary — the practical substitute for
+  # fine-tuning on your own voice. Add the names/jargon Whisper keeps mangling,
+  # including everyday words it mishears from *you* (accent/mic quirks — e.g.
+  # "weather" coming out as a garbled proper noun).
+  # whisper_cpp has no hotword biasing, so it appends hotwords to initial_prompt
+  # (and logs a warning). Keep the list short there: a long prompt can bias
+  # short commands toward these words.
+  hotwords: "CoreMind, weather, KJYO, KIAD, METAR, TAF, Ollama, Piper, Tailscale"
+  initial_prompt: "Aviation and home-assistant voice commands."
+
+  # ── whisper_local (faster-whisper) only ───────────────────────────────────
+  # Model size — speed vs accuracy on Mac CPU (Hugging Face name, downloaded
+  # on first use):
   #   tiny            — fastest (~0.5s/clip), ~75 MB download
   #   base            — fast (~1s/clip), ~140 MB download
   #   small           — balanced (~2s/clip), ~460 MB download
@@ -41,33 +72,36 @@ stt:
   #                     are misheard on smaller models
   #   large-v3        — most accurate, very slow on CPU, ~3 GB download
   model: distil-large-v3
-  language: en
-  # Accuracy tuning (whisper_local). The Mac Mini can afford higher settings.
   #   compute_type: int8 (fastest) | int8_float32 | float32 (most accurate)
-  #   beam_size:    higher = more accurate, slower (5–8 is a good range)
-  #   vad_filter:   strip silence/noise before decoding; cuts pause-hallucinations
   compute_type: int8_float32
-  beam_size: 8
-  vad_filter: true
-  # Bias the decoder toward your vocabulary — the practical substitute for
-  # fine-tuning on your own voice. Add the names/jargon Whisper keeps mangling,
-  # including everyday words it mishears from *you* (accent/mic quirks — e.g.
-  # "weather" coming out as a garbled proper noun).
-  hotwords: "CoreMind, weather, KJYO, KIAD, METAR, TAF, Ollama, Piper, Tailscale"
-  initial_prompt: "Aviation and home-assistant voice commands."
-  # Optional alternative engine: whisper.cpp, which runs on the Metal GPU on Apple
-  # Silicon (faster-whisper is CPU-only on macOS). Install with
-  #   pip install 'coremind[stt-cpp]'
-  # then set `provider: whisper_cpp` above. The block below only applies to
-  # whisper_cpp; model/compute_type above stay faster-whisper's, so switching back
-  # is a one-line change. language, beam_size, vad_filter, initial_prompt and
-  # hotwords are shared (whisper.cpp has no hotword biasing, so hotwords are folded
-  # into the initial prompt).
+
+  # ── whisper_cpp (whisper.cpp) only ────────────────────────────────────────
+  # Ignored unless provider: whisper_cpp.
   whisper_cpp:
-    model: large-v3-turbo     # ggml model name, downloaded + cached on first use
-    model_path: null          # explicit ggml .bin path — wins over model
-    n_threads: null           # null = pywhispercpp default
-    vad_model_path: null      # Silero ggml VAD model; needed for vad_filter with whisper.cpp
+    # ggml model name, downloaded on first use into pywhispercpp's models dir
+    # (~/Library/Application Support/pywhispercpp/models on macOS). Note that
+    # distil-large-v3 is a faster-whisper name; to use a different model, set
+    # model_path to its ggml file.
+    #   base.en              — fast, ~140 MB
+    #   small.en             — balanced, ~470 MB
+    #   medium.en            — accurate, ~1.5 GB
+    #   large-v3-turbo-q5_0  — quantized turbo: smaller and a bit faster, ~575 MB
+    #   large-v3-turbo       — near large-v3 accuracy, much faster  ← recommended
+    #                          ~1.6 GB
+    #   large-v3             — most accurate, slowest, ~3.1 GB
+    # (".en" models are English-only and slightly more accurate for English.
+    #  Other quantized variants, e.g. small.en-q8_0, also work.)
+    model: large-v3-turbo
+    # Explicit ggml .bin file. Wins over `model`; use it for custom or
+    # pre-downloaded models.
+    model_path: null          # e.g. ~/models/ggml-large-v3-turbo.bin
+    # CPU threads for the parts not on the GPU. null = pywhispercpp default (≤4).
+    n_threads: null
+    # whisper.cpp VAD needs a Silero model in ggml format (~0.9 MB). Download:
+    #   curl -L -o ~/models/ggml-silero-v5.1.2.bin \
+    #     https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin
+    # If this is unset, vad_filter is skipped for whisper_cpp (a warning is logged).
+    vad_model_path: null      # e.g. ~/models/ggml-silero-v5.1.2.bin
 
 tts:
   # provider options:

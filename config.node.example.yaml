@@ -95,6 +95,11 @@ vad:
 #     and run everything locally on the Pi.
 
 stt:
+  # In normal (Node → Hub) mode, the Hub's stt settings are used, including the
+  # choice of engine (whisper_local / whisper_cpp). Change STT on the Hub, not here.
+  # For standalone use on the Pi, faster-whisper with a small model is the tested
+  # setup. whisper_cpp's main advantage, the Metal GPU, doesn't exist on a Pi,
+  # and it hasn't been tested there.
   provider: whisper_local
   model: tiny   # tiny or base recommended on Pi 5 CPU
   language: en

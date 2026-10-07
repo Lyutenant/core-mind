@@ -32,9 +32,22 @@ audio:
   record_seconds: 6
 
 stt:
-  provider: whisper_local
-  model: base
+  provider: whisper_local     # whisper_local (faster-whisper) | whisper_cpp (whisper.cpp) | mock
   language: en
+  # Shared by both engines:
+  beam_size: 5                # higher = more accurate, slower; 1 = greedy
+  vad_filter: false           # strip silence before decoding (whisper_cpp also needs vad_model_path)
+  initial_prompt: null        # context sentence that nudges word choice
+  hotwords: null              # words to bias toward; whisper_cpp appends them to initial_prompt
+  # whisper_local (faster-whisper) only — pip install 'coremind[stt]':
+  model: base                 # tiny | base | small | medium | distil-large-v3 | large-v3
+  compute_type: int8          # int8 | int8_float32 | float32
+  # whisper_cpp (whisper.cpp, Metal GPU on Mac) only — pip install 'coremind[stt-cpp]':
+  whisper_cpp:
+    model: large-v3-turbo     # ggml name, downloaded on first use (base.en, small.en, medium.en, large-v3, …)
+    model_path: null          # explicit ggml .bin path; wins over model
+    n_threads: null           # null = pywhispercpp default
+    vad_model_path: null      # Silero ggml VAD model; required for vad_filter (see config.hub.example.yaml)
 
 tts:
   provider: piper_local
