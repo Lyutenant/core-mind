@@ -175,6 +175,23 @@ is silently dropped — no reply.
 
 ---
 
+## Voice replies are slow
+
+Each voice turn logs one line on the Hub with the time for each stage:
+
+```text
+turn timing: stt=2140ms llm=3810ms tts=420ms total=6402ms stt_engine=whisper_local/distil-large-v3 outcome=ok
+```
+
+- **`stt` dominates:** faster-whisper is CPU-only on macOS. Try the
+  `whisper_cpp` provider, which uses the Metal GPU
+  ([setup](setup-hub.md#optional-whispercpp-faster-stt-on-apple-silicon)). You
+  can also lower `beam_size`, or use `compute_type: int8`.
+- **`llm` dominates:** this time includes tool rounds. Check `ollama.no_think`,
+  try a smaller model, and see which tools ran in the dashboard turn log.
+- **The first turn after a restart is slow:** the STT model loads on the first
+  request.
+
 ## Updating
 
 ```bash

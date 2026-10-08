@@ -41,6 +41,13 @@ pip install -e ".[dev,stt,server]"
 
 This installs `coremind` (editable), `faster-whisper` (STT), and `fastapi`/`uvicorn` (Hub server).
 
+**Optional: whisper.cpp STT (runs on the Mac's Metal GPU, usually faster):**
+```bash
+pip install -e ".[stt-cpp]"
+```
+This installs it alongside faster-whisper, which stays the default. To switch,
+see [Optional: whisper.cpp](#optional-whispercpp-faster-stt-on-apple-silicon).
+
 **Optional — Piper TTS (neural voice, recommended):**
 ```bash
 pip install piper-tts
@@ -133,6 +140,39 @@ bigger model (all editable in the dashboard **Settings → STT** tab):
 True fine-tuning on recordings of your voice is possible but heavy (needs labeled
 audio, a GPU run, and re-export to CTranslate2 format) — the knobs above solve
 most accuracy problems without it.
+
+### Optional: whisper.cpp (faster STT on Apple Silicon)
+
+faster-whisper runs on the CPU only on macOS. whisper.cpp runs the same Whisper
+models on the Mac's **Metal GPU**, which is usually several times faster per
+voice turn. It is an *additional* provider: faster-whisper stays installed and
+configured, and you can switch between the two.
+
+```bash
+pip install -e ".[stt-cpp]"     # pywhispercpp (whisper.cpp bindings)
+```
+
+```yaml
+stt:
+  provider: whisper_cpp         # back to whisper_local any time
+  whisper_cpp:
+    model: large-v3-turbo       # downloaded + cached on first use
+```
+
+Or pick it in the dashboard (**Settings → STT → Provider**). `language`,
+`beam_size`, `vad_filter`, `initial_prompt` and `hotwords` are shared between the
+providers. Differences:
+
+- whisper.cpp has no hotword biasing, so `hotwords` are folded into the
+  `initial_prompt` (a warning is logged).
+- `vad_filter` with whisper.cpp needs a Silero ggml VAD model file, set as
+  `stt.whisper_cpp.vad_model_path`. Without it, VAD is skipped with a warning.
+- Model names are whisper.cpp's ggml names (`large-v3-turbo`, `medium.en`, …).
+  `distil-large-v3` is a faster-whisper name; to use a different ggml file, point
+  `stt.whisper_cpp.model_path` at the file.
+
+To compare the engines, check the Hub log. Every voice turn logs a
+`turn timing: stt=…ms llm=…ms tts=…ms total=…ms stt_engine=…` line.
 
 ---
 

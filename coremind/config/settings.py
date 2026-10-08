@@ -64,11 +64,30 @@ class AudioConfig(BaseModel):
         return v
 
 
+class WhisperCppConfig(BaseModel):
+    """whisper.cpp-specific settings (stt.provider: whisper_cpp).
+
+    Kept separate from the faster-whisper fields so switching providers never
+    clobbers either engine's model choice. language, beam_size, vad_filter,
+    initial_prompt and hotwords are shared with whisper_local.
+    """
+    model: str = "large-v3-turbo"      # ggml model name; downloaded + cached on first use
+    model_path: Optional[str] = None   # explicit .bin path — wins over model
+    n_threads: Optional[int] = None    # null = pywhispercpp default
+    vad_model_path: Optional[str] = None  # Silero ggml VAD model; required for vad_filter
+
+    @field_validator("model_path", "vad_model_path")
+    @classmethod
+    def expand_paths(cls, v: Optional[str]) -> Optional[str]:
+        return str(Path(v).expanduser()) if v else None
+
+
 class STTConfig(BaseModel):
-    provider: str = "whisper_local"
+    provider: str = "whisper_local"     # whisper_local (faster-whisper) | whisper_cpp | mock
     model: str = "small"
     language: str = "en"
-    # Accuracy/quality knobs (whisper_local only).
+    # Accuracy/quality knobs. compute_type is whisper_local only; the rest are
+    # shared with whisper_cpp.
     compute_type: str = "int8"          # int8 | int8_float32 | float32 — higher = more accurate, slower
     beam_size: int = 5                  # higher = more accurate, slower
     vad_filter: bool = False            # Silero VAD: strip silence/noise before decoding
@@ -76,6 +95,7 @@ class STTConfig(BaseModel):
     # for fine-tuning on your own voice. Both are optional free text.
     initial_prompt: Optional[str] = None  # context sentence(s) fed to the decoder
     hotwords: Optional[str] = None        # comma/space-separated words to bias toward
+    whisper_cpp: WhisperCppConfig = WhisperCppConfig()
 
 
 class TTSConfig(BaseModel):
