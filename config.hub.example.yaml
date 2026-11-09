@@ -170,6 +170,8 @@ tools:
   #       # ${VAR} is read from the Hub's environment at connect time, so the
   #       # long-lived access token never sits in this file. See docs/tools.md.
   #       Authorization: "Bearer ${HA_TOKEN}"
+  #     use_prompts: true       # default: inject the server's MCP prompt (HA's Assist
+  #                             # guidance + exposed entities) into the system prompt
 
 remote_brain:
   enabled: false   # Hub does not forward to another Hub

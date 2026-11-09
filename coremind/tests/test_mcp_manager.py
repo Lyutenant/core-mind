@@ -327,3 +327,110 @@ def test_hold_connection_streamable_http_needs_new_enough_mcp(monkeypatch):
     monkeypatch.setattr(mm, "streamablehttp_client", None)
     srv = _srv(name="ha", transport="streamable-http", url="http://ha:8123/api/mcp")
     assert _run_hold(srv) is True
+
+
+# --- isError flagging ---------------------------------------------------------------
+
+def test_extract_flags_error_results():
+    from coremind.tools.mcp_manager import TOOL_ERROR_PREFIX
+
+    res = _result(content=["Error calling tool: MatchFailedError"])
+    res.isError = True
+    out = _extract_tool_result(res)
+    assert out.startswith(TOOL_ERROR_PREFIX)
+    assert out.endswith("Error calling tool: MatchFailedError")
+
+
+def test_extract_accepts_mcp2_snake_case_fields():
+    # mcp 2.x models expose is_error / structured_content (no camelCase attributes).
+    res = SimpleNamespace(
+        content=[SimpleNamespace(text='{"result": "raw"}')],
+        structured_content={"result": "raw"},
+        is_error=False,
+    )
+    assert _extract_tool_result(res, _WRAP_SCHEMA) == "raw"
+    res.is_error = True
+    assert _extract_tool_result(res, _WRAP_SCHEMA).startswith("TOOL ERROR")
+
+
+def test_extract_success_result_is_unchanged():
+    res = _result(content=["ok"])
+    res.isError = False
+    assert _extract_tool_result(res) == "ok"
+
+
+# --- Server prompts → instructions ---------------------------------------------------
+
+def _prompt(name, *, required_arg=False, text="use area + domain"):
+    args = [SimpleNamespace(name="x", required=True)] if required_arg else []
+    return SimpleNamespace(name=name, arguments=args, _text=text)
+
+
+class PromptSession(FakeSession):
+    """FakeSession that also serves prompts (or raises when asked to)."""
+
+    def __init__(self, *tool_lists, prompts=(), fail_prompts=False):
+        super().__init__(*tool_lists)
+        self._prompts = list(prompts)
+        self._fail = fail_prompts
+        self.get_prompt_calls: list[str] = []
+
+    async def list_prompts(self):
+        if self._fail:
+            raise RuntimeError("Method not found")
+        return SimpleNamespace(prompts=self._prompts)
+
+    async def get_prompt(self, name, arguments=None):
+        self.get_prompt_calls.append(name)
+        text = next(p._text for p in self._prompts if p.name == name)
+        msg = SimpleNamespace(role="assistant", content=SimpleNamespace(type="text", text=text))
+        return SimpleNamespace(messages=[msg])
+
+
+def test_register_schemas_collects_argument_free_prompts():
+    mgr = MCPManager()
+    sess = PromptSession(["HassTurnOn"], prompts=[
+        _prompt("Assist", text="When controlling an area, pass area + domain."),
+        _prompt("NeedsArgs", required_arg=True, text="never fetched"),
+    ])
+    asyncio.run(mgr._register_schemas("ha", sess))
+    assert _names(mgr) == {"HassTurnOn"}
+    assert mgr.instructions == {"ha": "When controlling an area, pass area + domain."}
+    assert sess.get_prompt_calls == ["Assist"]
+
+
+def test_register_schemas_survives_server_without_prompt_support():
+    # The Node's FastMCP server has no prompts → list_prompts raises; tools must
+    # still register and no instructions are recorded.
+    mgr = MCPManager()
+    sess = PromptSession(["play_music"], fail_prompts=True)
+    asyncio.run(mgr._register_schemas("node", sess))
+    assert _names(mgr) == {"play_music"}
+    assert mgr.instructions == {}
+
+
+def test_register_schemas_respects_use_prompts_false():
+    mgr = MCPManager()
+    mgr._use_prompts["ha"] = False
+    sess = PromptSession(["HassTurnOn"], prompts=[_prompt("Assist")])
+    asyncio.run(mgr._register_schemas("ha", sess))
+    assert mgr.instructions == {}
+    assert sess.get_prompt_calls == []
+
+
+def test_register_instructions_truncates_and_clears():
+    from coremind.tools.mcp_manager import MAX_INSTRUCTIONS_CHARS
+
+    mgr = MCPManager()
+    long_sess = PromptSession(["t"], prompts=[_prompt("P", text="x" * (MAX_INSTRUCTIONS_CHARS + 50))])
+    asyncio.run(mgr._register_schemas("s", long_sess))
+    assert len(mgr.instructions["s"]) == MAX_INSTRUCTIONS_CHARS
+    # A later sync with no prompts clears the stale text.
+    asyncio.run(mgr._register_schemas("s", PromptSession(["t"], prompts=[])))
+    assert mgr.instructions == {}
+
+
+def test_server_config_use_prompts_defaults_true():
+    from coremind.config.settings import MCPServerConfig
+
+    assert MCPServerConfig(name="ha", transport="streamable-http", url="http://x").use_prompts

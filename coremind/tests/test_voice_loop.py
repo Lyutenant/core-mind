@@ -357,3 +357,50 @@ def test_hub_sync_tick_correction_retries_on_non_200(mocker):
     loop._hub_sync_tick(fake_httpx, "http://hub:8765", "abc123", "Bot", "pi")
 
     assert loop._last_vad_request is None  # not reconciled → retried next poll
+
+
+# --- SessionMemory.add_turn: tool calls stay visible in the LLM history -------------
+
+def test_session_memory_add_turn_keeps_tool_exchange():
+    mem = SessionMemory(max_turns=5)
+    mem.add_turn(
+        "Turn off the light in living room",
+        "Done.",
+        [{"name": "HassTurnOff", "args": {"area": "living room", "domain": ["light"]},
+          "result": '{"response_type": "action_done"}'}],
+    )
+    msgs = mem.get_messages()
+    assert [m["role"] for m in msgs] == ["user", "assistant", "tool", "assistant"]
+    call = msgs[1]["tool_calls"][0]["function"]
+    assert call["name"] == "HassTurnOff"
+    assert call["arguments"] == {"area": "living room", "domain": ["light"]}
+    assert msgs[2]["tool_name"] == "HassTurnOff"
+    assert "action_done" in msgs[2]["content"]
+    assert msgs[3] == {"role": "assistant", "content": "Done."}
+
+
+def test_session_memory_add_turn_without_tools_is_plain_pair():
+    mem = SessionMemory()
+    mem.add_turn("hello", "hi", [])
+    assert mem.get_messages() == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi"},
+    ]
+
+
+def test_session_memory_clips_long_tool_results():
+    mem = SessionMemory(max_tool_result_chars=20)
+    mem.add_turn("q", "a", [{"name": "t", "args": {}, "result": "x" * 100}])
+    tool_msg = mem.get_messages()[2]
+    assert tool_msg["content"] == "x" * 20 + "…"
+
+
+def test_session_memory_truncates_by_turn_not_by_message():
+    # Tool-heavy turns have 4+ messages each; the cap must count turns and always
+    # cut at a user message so no tool exchange is left without its request.
+    mem = SessionMemory(max_turns=2)
+    for i in range(5):
+        mem.add_turn(f"q{i}", f"a{i}", [{"name": "t", "args": {}, "result": "r"}])
+    msgs = mem.get_messages()
+    assert msgs[0] == {"role": "user", "content": "q3"}
+    assert [m["role"] for m in msgs] == ["user", "assistant", "tool", "assistant"] * 2

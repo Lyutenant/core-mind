@@ -48,3 +48,39 @@ def test_system_prompt_omits_location_clause_when_unset():
     prompt = _build_system_prompt(Settings())
     assert "mis-transcription" not in prompt
     assert "located in" not in prompt
+
+
+# --- Tool-use rules -----------------------------------------------------------------
+
+def test_system_prompt_has_no_tool_rules_without_tools():
+    prompt = _build_system_prompt(Settings())
+    assert "tool" not in prompt.lower()
+
+
+def test_system_prompt_tool_rules_demand_a_call_and_honest_outcome():
+    prompt = _build_system_prompt(Settings(), tool_names=["get_weather"])
+    assert "Call the tool every time" in prompt
+    assert "never answer from memory" in prompt
+    assert "returned a success result" in prompt
+    assert "the action did not happen" in prompt
+    # The Home Assistant hint only appears when HA tools are registered.
+    assert "HassTurnOn" not in prompt
+
+
+def test_system_prompt_adds_home_assistant_targeting_hint():
+    prompt = _build_system_prompt(
+        Settings(), tool_names=["get_weather", "HassTurnOn", "HassTurnOff"]
+    )
+    assert "area plus domain" in prompt
+    assert "never means light" in prompt
+    assert "GetLiveContext" in prompt
+
+
+def test_system_prompt_appends_mcp_server_instructions():
+    prompt = _build_system_prompt(
+        Settings(),
+        tool_names=["HassTurnOn"],
+        tool_instructions={"homeassistant": "Prefer area and domain.", "node": ""},
+    )
+    assert "Instructions from the 'homeassistant' tool server: Prefer area and domain." in prompt
+    assert "'node' tool server" not in prompt   # empty text is skipped
