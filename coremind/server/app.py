@@ -346,7 +346,27 @@ def _rename_session(session_id: str, title: str) -> dict:
 _load_sessions()
 
 
-def _build_system_prompt(s) -> str:
+def _tool_prompt_context() -> tuple[list[str], dict[str, str]]:
+    """(tool names the LLM can call, {mcp server → its published instructions})."""
+    dispatcher = _get_dispatcher()
+    names = [t["function"]["name"] for t in dispatcher.get_tool_definitions()]
+    instructions = _mcp_manager.instructions if _mcp_manager is not None else {}
+    return names, instructions
+
+
+def _build_system_prompt(
+    s,
+    *,
+    tool_names: list[str] | None = None,
+    tool_instructions: dict[str, str] | None = None,
+) -> str:
+    """Compose the Hub system prompt.
+
+    ``tool_names`` / ``tool_instructions`` (from ``_tool_prompt_context``) add the
+    tool-use rules: an honesty clause (never report an action as done unless a tool
+    in *this* turn succeeded), Home Assistant targeting hints when its tools are
+    present, and any instructions MCP servers published as prompts.
+    """
     parts = [
         f"You are {s.app.name}, a voice assistant running on a Raspberry Pi.",
         "Keep responses concise and conversational.",
@@ -376,6 +396,31 @@ def _build_system_prompt(s) -> str:
             f"The user's home airport is {s.app.home_airport}. "
             "Use it when they ask about aviation weather without specifying an airport."
         )
+    if tool_names:
+        # Observed with qwen3:8b + Home Assistant: after one real success the model
+        # started answering "the lights are off, sir" with no tool call at all, and
+        # reported success after a call that returned a validation error.
+        parts.append(
+            "You control devices and fetch information only through your tools. "
+            "Call the tool every time the user asks for an action, even if the same "
+            "request was handled earlier in this conversation — never answer from "
+            "memory. Only say an action was done when a tool call in this turn "
+            "returned a success result. If a tool returned an error, the action did "
+            "not happen: retry once with corrected arguments if the error tells you "
+            "what was wrong, otherwise tell the user briefly what failed."
+        )
+    if tool_names and any(n.startswith("Hass") for n in tool_names):
+        parts.append(
+            "Home Assistant tools (HassTurnOn, HassTurnOff, ...): to control the devices "
+            "in a room, pass area plus domain, e.g. area 'Living Room' and domain "
+            "['light']. 'device_class' is only for covers, switches and media devices "
+            "and never means light — lights are domain ['light']. Pass 'name' only when "
+            "the user names a specific device. Use GetLiveContext to check current "
+            "states when asked."
+        )
+    for server, text in (tool_instructions or {}).items():
+        if text:
+            parts.append(f"Instructions from the '{server}' tool server: {text}")
     return " ".join(parts)
 
 
@@ -530,8 +575,10 @@ def _get_session(session_id: str):
         if sess:
             for rnd in sess["rounds"][-mem.max_turns:]:
                 if rnd.get("transcript"):
-                    mem.add("user", rnd["transcript"])
-                if rnd.get("response"):
+                    mem.add_turn(
+                        rnd["transcript"], rnd.get("response") or "", rnd.get("tool_calls")
+                    )
+                elif rnd.get("response"):
                     mem.add("assistant", rnd["response"])
         _sessions[session_id] = mem
     return _sessions[session_id]
@@ -1240,8 +1287,11 @@ try:
         _broadcast({"type": "status", "text": "Sending to LLM..."})
 
         memory = _get_session(session_id)
+        tool_names, tool_instructions = _tool_prompt_context()
         messages = (
-            [{"role": "system", "content": _build_system_prompt(s)}]
+            [{"role": "system", "content": _build_system_prompt(
+                s, tool_names=tool_names, tool_instructions=tool_instructions
+            )}]
             + memory.get_messages()
             + [{"role": "user", "content": transcript}]
         )
@@ -1263,8 +1313,7 @@ try:
                 },
             )
 
-        memory.add("user", transcript)
-        memory.add("assistant", response_text)
+        memory.add_turn(transcript, response_text, tool_calls_used)
 
         _broadcast({"type": "response", "text": response_text})
         _broadcast({"type": "status", "text": "Synthesizing speech..."})
@@ -1329,8 +1378,11 @@ try:
         _broadcast({"type": "status", "text": "Sending to LLM..."})
 
         memory = _get_session(session_id)
+        tool_names, tool_instructions = _tool_prompt_context()
         messages = (
-            [{"role": "system", "content": _build_system_prompt(s)}]
+            [{"role": "system", "content": _build_system_prompt(
+                s, tool_names=tool_names, tool_instructions=tool_instructions
+            )}]
             + memory.get_messages()
             + [{"role": "user", "content": text}]
         )
@@ -1346,8 +1398,7 @@ try:
             response_text = f"[Error: {e}]"
 
         if llm_error is None:
-            memory.add("user", text)
-            memory.add("assistant", response_text)
+            memory.add_turn(text, response_text, tool_calls_used)
             _broadcast({"type": "response", "text": response_text})
 
         # Always broadcast a turn event so the pending card is cleared regardless

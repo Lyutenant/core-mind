@@ -27,6 +27,14 @@ except ImportError:
 if TYPE_CHECKING:
     from coremind.config.settings import MCPServerConfig
 
+# Prepended to the text of an MCP tool result that carried the `isError` flag.
+TOOL_ERROR_PREFIX = "TOOL ERROR (the action was not performed): "
+
+# Longest server-provided prompt (instructions) we'll inject into the system prompt.
+# Home Assistant's Assist prompt with a few dozen exposed entities is ~1-3 KB; the
+# cap keeps a chatty server from swamping a small model's context.
+MAX_INSTRUCTIONS_CHARS = 6000
+
 
 def _is_fastmcp_result_wrapper(output_schema) -> bool:
     """True if an MCP tool's outputSchema is FastMCP's primitive ``result`` wrapper.
@@ -71,22 +79,52 @@ def _extract_tool_result(result, output_schema=None) -> str:
     Otherwise fall back to joining the ``content`` text blocks — which preserves the
     faithful JSON for genuine structured results and covers plain-text servers.
     """
-    structured = getattr(result, "structuredContent", None)
+    structured = _attr(result, "structuredContent", "structured_content")
     if (
         _is_fastmcp_result_wrapper(output_schema)
         and isinstance(structured, dict)
         and set(structured) == {"result"}
     ):
         value = structured["result"]
-        return value if isinstance(value, str) else str(value)
+        text = value if isinstance(value, str) else str(value)
+    else:
+        parts = []
+        for content in result.content:
+            if hasattr(content, "text"):
+                parts.append(content.text)
+            else:
+                parts.append(str(content))
+        text = "\n".join(parts) if parts else "(empty response)"
 
-    parts = []
-    for content in result.content:
-        if hasattr(content, "text"):
-            parts.append(content.text)
-        else:
-            parts.append(str(content))
-    return "\n".join(parts) if parts else "(empty response)"
+    # An MCP error result (`isError`) means the server did NOT perform the action —
+    # e.g. Home Assistant's "Error calling tool: MatchFailedError" or the SDK's
+    # "Input validation error: 'light' is not one of [...]". The text alone reads
+    # like any other result to a small model, which then happily reports success.
+    # Make the failure explicit so the LLM (and the dashboard) can't miss it.
+    if _attr(result, "isError", "is_error"):
+        return f"{TOOL_ERROR_PREFIX}{text}"
+    return text
+
+
+def _attr(obj, *names, default=None):
+    """First present attribute among ``names`` (mcp 1.x camelCase vs 2.x snake_case)."""
+    for name in names:
+        if hasattr(obj, name):
+            return getattr(obj, name)
+    return default
+
+
+def _prompt_text(get_prompt_result) -> str:
+    """Join the text content of an MCP ``GetPromptResult``'s messages."""
+    parts: list[str] = []
+    for msg in getattr(get_prompt_result, "messages", None) or []:
+        content = getattr(msg, "content", None)
+        blocks = content if isinstance(content, list) else [content]
+        for block in blocks:
+            text = getattr(block, "text", None)
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+    return "\n".join(parts)
 
 
 class MCPManager:
@@ -103,6 +141,12 @@ class MCPManager:
         self._tool_to_server: dict[str, str] = {}        # tool_name → server_name
         self._schemas: list[dict] = []
         self._output_schemas: dict[str, dict] = {}       # tool_name → outputSchema (for unwrap)
+        # server_name → text of the server's argument-free MCP prompt(s). Servers use
+        # prompts to tell the LLM *how* to use their tools (Home Assistant: "when
+        # controlling an area, pass area + domain" plus the exposed-entity list);
+        # the Hub appends this to the system prompt. Refreshed with every re-sync.
+        self._instructions: dict[str, str] = {}
+        self._use_prompts: dict[str, bool] = {}          # server_name → MCPServerConfig.use_prompts
         # While a connection is held open, re-fetch its tool list every
         # `resync_interval` seconds so capabilities added on the server (e.g. a
         # newly enabled camera tool) are picked up without a reconnect or a Hub
@@ -161,6 +205,11 @@ class MCPManager:
     @property
     def tool_to_server(self) -> dict[str, str]:
         return self._tool_to_server
+
+    @property
+    def instructions(self) -> dict[str, str]:
+        """server_name → prompt text the server published for using its tools."""
+        return dict(self._instructions)
 
     async def call_tool(self, tool_name: str, arguments: dict) -> str:
         server_name = self._tool_to_server.get(tool_name)
@@ -234,6 +283,7 @@ class MCPManager:
             ready.set()
             return
 
+        self._use_prompts[srv.name] = getattr(srv, "use_prompts", True)
         first_attempt = True
         retry_delay = 10.0
 
@@ -354,7 +404,7 @@ class MCPManager:
         for tool in result.tools:
             self._schemas.append(self._to_ollama_schema(tool))
             self._tool_to_server[tool.name] = server_name
-            output_schema = getattr(tool, "outputSchema", None)
+            output_schema = _attr(tool, "outputSchema", "output_schema")
             if output_schema:
                 self._output_schemas[tool.name] = output_schema
         current = {tool.name for tool in result.tools}
@@ -367,6 +417,50 @@ class MCPManager:
             logger.debug(
                 "MCP server %r: re-synced, %d tool(s) unchanged", server_name, len(current)
             )
+        # Instructions are best-effort: a server without prompt support (the Node)
+        # or a failed fetch must never affect the tool registration above.
+        if self._use_prompts.get(server_name, True):
+            try:
+                await self._register_instructions(server_name, session)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("MCP server %r: prompt fetch failed (%s)", server_name, exc)
+
+    async def _register_instructions(self, server_name: str, session) -> None:
+        """Fetch the server's argument-free prompts and store their text.
+
+        MCP prompts are how a server tells the client's LLM how to use its tools.
+        Only prompts that need no arguments are usable unattended; those are fetched
+        and concatenated (most servers publish exactly one). An empty result clears
+        any previous text; a failure (caught by the caller) keeps it.
+        """
+        listed = await session.list_prompts()
+        texts: list[str] = []
+        for prompt in getattr(listed, "prompts", None) or []:
+            if any(getattr(arg, "required", False) for arg in (prompt.arguments or [])):
+                continue
+            fetched = await session.get_prompt(prompt.name)
+            text = _prompt_text(fetched)
+            if text:
+                texts.append(text)
+        combined = "\n\n".join(texts)
+        if len(combined) > MAX_INSTRUCTIONS_CHARS:
+            logger.warning(
+                "MCP server %r: prompt text is %d chars — truncated to %d",
+                server_name, len(combined), MAX_INSTRUCTIONS_CHARS,
+            )
+            combined = combined[:MAX_INSTRUCTIONS_CHARS]
+        previous = self._instructions.get(server_name, "")
+        if combined:
+            self._instructions[server_name] = combined
+        else:
+            self._instructions.pop(server_name, None)
+        if combined != previous:
+            logger.info(
+                "MCP server %r: %d chars of tool instructions %s",
+                server_name, len(combined), "registered" if combined else "cleared",
+            )
 
     @staticmethod
     def _to_ollama_schema(tool) -> dict:
@@ -375,6 +469,7 @@ class MCPManager:
             "function": {
                 "name": tool.name,
                 "description": tool.description or "",
-                "parameters": tool.inputSchema or {"type": "object", "properties": {}},
+                "parameters": _attr(tool, "inputSchema", "input_schema")
+                or {"type": "object", "properties": {}},
             },
         }

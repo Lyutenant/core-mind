@@ -138,7 +138,7 @@ coremind/
   wake_word/        base.py, dummy.py, openwakeword_engine.py (onnx for Pi)
   vad/              base.py, simple_energy.py
   vision/           base.py (Camera + MockCamera), opencv_camera.py (USB webcam capture, Node)
-  memory/           session_memory.py (last-N-turns; no vector DB)
+  memory/           session_memory.py (last-N-turns incl. tool calls/results; no vector DB)
   config/           settings.py — Pydantic models, YAML + env var overrides
 
   tools/            Hub-side tool layer
@@ -230,7 +230,8 @@ tools:
     - {name: filesystem, transport: stdio, command: ["npx", "..."]}            # optional env: {...}
     - {name: homeassistant, transport: streamable-http,                        # URL used as-is
        url: "http://<ha-host>:8123/api/mcp",
-       headers: {Authorization: "Bearer ${HA_TOKEN}"}}                         # ${VAR} from Hub env
+       headers: {Authorization: "Bearer ${HA_TOKEN}"},                         # ${VAR} from Hub env
+       use_prompts: true}                 # default; false = don't inject this server's MCP prompt
 vision:                              # camera capture on the Node (Pi)
   enabled: true                      # exposes the capture_image MCP tool; pip install 'coremind[vision]'
   provider: opencv                   # opencv (USB webcam) | mock
@@ -277,6 +278,9 @@ One line per subsystem. **Read the linked section of
   - `_build_system_prompt` (`server/app.py`) serves voice + chat
   - `app.personality` is the persona, and the Hub's value governs in remote mode
   - the location clause defends against STT-garbled place names
+  - with tools registered: call the tool every time, report "done" only on a success result
+    this turn; `Hass*` tools add an area+domain targeting hint; MCP server prompts are
+    appended as per-server instructions
 - **[Speech-to-text providers](docs/architecture.md#speech-to-text-providers):**
   - `make_stt()` is the one selection point (`whisper_local` default, `whisper_cpp`, `mock`)
   - whisper.cpp settings are nested under `stt.whisper_cpp`; decode knobs are shared
@@ -294,6 +298,9 @@ One line per subsystem. **Read the linked section of
   - `${VAR}` secrets are expanded at connect time only
   - reconnect with backoff, 45 s re-sync, `POST /api/tools/refresh`
   - FastMCP `{"result": …}` unwrap, gated on `outputSchema`
+  - `isError` results come back prefixed `TOOL ERROR (the action was not performed):`
+  - each server's argument-free MCP prompts are fetched on every sync (`use_prompts`) and
+    injected into the system prompt; session memory keeps tool calls + results in history
 - **[Node registration](docs/architecture.md#node-registration):**
   - auto-register + 30 s heartbeat, re-register on a 404
   - hot-reloaded Node params

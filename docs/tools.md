@@ -208,6 +208,16 @@ Restart the Hub and verify with `curl http://localhost:8765/api/tools` — the `
 should now include `Hass*` tools. Entities exposed later are picked up automatically by the
 periodic re-sync (or immediately via the Tools panel's **Sync MCP** button).
 
+**What the Hub does with HA's guidance.** HA publishes its Assist instructions (how to
+target devices, the overview of exposed entities and areas) as an MCP *prompt*. The Hub
+fetches it on every tool sync and appends it to the system prompt, alongside its own rule
+for small models: control a room with `area` + `domain` (lights are `domain: ["light"]`;
+`device_class` never means light), call the tool every time, and only report "done" when the
+call returned success. An HA error (e.g. `MatchFailedError` for an unknown name, or a
+`device_class` validation error) reaches the model prefixed `TOOL ERROR (the action was not
+performed)`, so it retries or tells you instead of claiming success. Set `use_prompts: false`
+on the server entry if you'd rather HA's prompt stayed out of the system prompt.
+
 Note: HA adds roughly 10–20 tools to the schema list the LLM sees. Small local models get
 less reliable at tool selection as the count grows — if home commands start misfiring, try a
 stronger `ollama.model` before blaming HA.

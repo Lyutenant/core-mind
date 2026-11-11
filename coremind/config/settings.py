@@ -192,6 +192,11 @@ class MCPServerConfig(BaseModel):
     # Extra env vars for the spawned process (stdio only), merged over the MCP
     # SDK's default environment. Same ${VAR} expansion rules as headers.
     env: Optional[dict[str, str]] = None
+    # Fetch the server's argument-free MCP prompts and append them to the Hub's
+    # system prompt as "how to use these tools" instructions (Home Assistant
+    # publishes its Assist guidance and exposed-entity list this way). Set false
+    # for a server whose prompt you don't want steering the assistant.
+    use_prompts: bool = True
 
     def resolved_headers(self) -> Optional[dict[str, str]]:
         if not self.headers:
